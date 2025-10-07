@@ -13,14 +13,11 @@ metadata:
 spec:
   containers:
     - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.0.0
+      image: riccardotornesello/hello-world-http-server:v1.1.0
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 8080
           name: web
-      env:
-        - name: IDENTIFIER
-          value: p1
 ---
 apiVersion: v1
 kind: Service
@@ -52,14 +49,11 @@ metadata:
 spec:
   containers:
     - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.0.0
+      image: riccardotornesello/hello-world-http-server:v1.1.0
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 8080
           name: web
-      env:
-        - name: IDENTIFIER
-          value: p1
 ---
 apiVersion: v1
 kind: Service
