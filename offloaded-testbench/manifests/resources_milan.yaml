@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: milan-local
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: p6
+  namespace: milan-local
+  labels:
+    app: p6
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.0.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+          name: web
+      env:
+        - name: IDENTIFIER
+          value: p6
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3
+  namespace: milan-local
+spec:
+  ports:
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: p6
+  type: ClusterIP
