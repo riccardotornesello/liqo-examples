@@ -46,10 +46,7 @@ create_resources "$KUBECONFIG_2" "$MANIFEST_CALICO_1"
 create_resources "$KUBECONFIG_2" "$MANIFEST_CALICO_2"
 create_resources "$KUBECONFIG_2" "$MANIFEST_CALICO_3"
 
-wait_for_nodes_ready "$KUBECONFIG_1"
 install_liqo_version "$CLUSTER_NAME_1" "$KUBECONFIG_1" "$LIQO_VERSION" "$LIQO_REPO"
-
-wait_for_nodes_ready "$KUBECONFIG_2"
 install_liqo_version "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_VERSION" "$LIQO_REPO"
 
 peer_clusters "$KUBECONFIG_1" "$KUBECONFIG_2"
