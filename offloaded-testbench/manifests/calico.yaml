@@ -7,6 +7,8 @@ metadata:
 spec:
   # Configures Calico networking.
   calicoNetwork:
+    nodeAddressAutodetectionV4:
+      skipInterface: liqo.*
     ipPools:
       - name: default-ipv4-ippool
         blockSize: 26

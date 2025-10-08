@@ -20,6 +20,8 @@ MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3
 MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
 MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 
+REGISTRY_IP="172.18.0.2"
+
 LIQO_CLUSTER_CONFIG_YAML="$here/manifests/cluster.yaml"
 
 # LIQO_REPO="https://github.com/liqotech/liqo"
@@ -37,6 +39,9 @@ delete_all_kind_clusters
 
 create_kind_cluster_no_wait "$CLUSTER_NAME_1" "$KUBECONFIG_1" "$LIQO_CLUSTER_CONFIG_YAML"
 create_kind_cluster_no_wait "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_CLUSTER_CONFIG_YAML"
+
+register_image_cache "$CLUSTER_NAME_1" "$REGISTRY_IP"
+register_image_cache "$CLUSTER_NAME_2" "$REGISTRY_IP"
 
 create_resources "$KUBECONFIG_1" "$MANIFEST_CALICO_1"
 create_resources "$KUBECONFIG_1" "$MANIFEST_CALICO_2"
