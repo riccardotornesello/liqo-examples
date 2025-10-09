@@ -21,16 +21,16 @@ MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3
 MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
 MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 
-REGISTRY_IP="172.18.0.2"
+REGISTRY_IP="172.18.0.7"
 
 LIQO_CLUSTER_CONFIG_CONSUMER="$here/manifests/cluster_consumer.yaml"
 LIQO_CLUSTER_CONFIG_PROVIDER="$here/manifests/cluster_provider.yaml"
 
-# LIQO_REPO="https://github.com/liqotech/liqo"
-# LIQO_VERSION="v1.0.1"
+LIQO_REPO="https://github.com/liqotech/liqo"
+LIQO_VERSION="v1.0.1"
 
-LIQO_REPO="https://github.com/Wekkser/liqo.git"
-LIQO_VERSION="e300636af16a6ecd02aa661eb5c492243497f93a"
+# LIQO_REPO="https://github.com/Wekkser/liqo.git"
+# LIQO_VERSION="e300636af16a6ecd02aa661eb5c492243497f93a"
 
 # LIQO_REPO="https://github.com/riccardotornesello/liqo.git"
 # LIQO_VERSION="adc674974e54b9bb80d571db87a2eda380d4d8d6"

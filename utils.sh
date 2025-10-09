@@ -134,9 +134,9 @@ function register_image_cache() {
 
     local setup_url="http://$registry_ip:3128/setup/systemd"
     
-    curl -s "$setup_url" | sed "s/docker\.service/containerd\.service/g" | sed "/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/" > /tmp/setup_cache.sh
-
     info "Registering image cache for cluster \"$cluster_name\"..."
+
+    curl -s "$setup_url" | sed "s/docker\.service/containerd\.service/g" | sed "/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/" > /tmp/setup_cache.sh
 
     for NODE in $(kind get nodes --name "$cluster_name"); do
         fail_on_error "docker cp /tmp/setup_cache.sh $NODE:/setup_cache.sh" "Failed to copy setup script to node \"$NODE\" in cluster \"$cluster_name\""

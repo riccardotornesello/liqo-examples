@@ -18,25 +18,6 @@ spec:
 
 ---
 apiVersion: v1
-kind: Pod
-metadata:
-  name: pp2
-  namespace: provider-local
-  labels:
-    app: pp2
-spec:
-  containers:
-    - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.1.0
-      imagePullPolicy: IfNotPresent
-      ports:
-        - containerPort: 8080
-          name: web
-  nodeSelector:
-    kubernetes.io/hostname: milan-worker2
-
----
-apiVersion: v1
 kind: Service
 metadata:
   name: sp1
@@ -49,20 +30,4 @@ spec:
       targetPort: web
   selector:
     app: pp1
-  type: ClusterIP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: sp2
-  namespace: provider-local
-spec:
-  ports:
-    - name: web
-      port: 8080
-      protocol: TCP
-      targetPort: web
-  selector:
-    app: pp2
   type: ClusterIP
