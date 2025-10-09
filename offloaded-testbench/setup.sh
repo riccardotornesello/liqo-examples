@@ -13,8 +13,9 @@ CLUSTER_NAME_2=milan
 KUBECONFIG_1=liqo_kubeconf_rome
 KUBECONFIG_2=liqo_kubeconf_milan
 
-MANIFEST_1="$here/manifests/resources_rome.yaml"
-MANIFEST_2="$here/manifests/resources_milan.yaml"
+MANIFEST_CONSUMER="$here/manifests/resources_consumer.yaml"
+MANIFEST_PROVIDER="$here/manifests/resources_provider.yaml"
+MANIFEST_OFFLOADED="$here/manifests/resources_offloaded.yaml"
 
 MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/operator-crds.yaml
 MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
@@ -22,7 +23,8 @@ MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 
 REGISTRY_IP="172.18.0.2"
 
-LIQO_CLUSTER_CONFIG_YAML="$here/manifests/cluster.yaml"
+LIQO_CLUSTER_CONFIG_CONSUMER="$here/manifests/cluster_consumer.yaml"
+LIQO_CLUSTER_CONFIG_PROVIDER="$here/manifests/cluster_provider.yaml"
 
 # LIQO_REPO="https://github.com/liqotech/liqo"
 # LIQO_VERSION="v1.0.1"
@@ -37,8 +39,8 @@ check_requirements
 
 delete_all_kind_clusters
 
-create_kind_cluster_no_wait "$CLUSTER_NAME_1" "$KUBECONFIG_1" "$LIQO_CLUSTER_CONFIG_YAML"
-create_kind_cluster_no_wait "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_CLUSTER_CONFIG_YAML"
+create_kind_cluster_no_wait "$CLUSTER_NAME_1" "$KUBECONFIG_1" "$LIQO_CLUSTER_CONFIG_CONSUMER"
+create_kind_cluster_no_wait "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_CLUSTER_CONFIG_PROVIDER"
 
 register_image_cache "$CLUSTER_NAME_1" "$REGISTRY_IP"
 register_image_cache "$CLUSTER_NAME_2" "$REGISTRY_IP"
@@ -56,11 +58,12 @@ install_liqo_version "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_VERSION" "$LIQO_RE
 
 peer_clusters "$KUBECONFIG_1" "$KUBECONFIG_2"
 
-create_namespace "$KUBECONFIG_1" rome-offloaded
-create_namespace "$KUBECONFIG_1" rome-local
-create_namespace "$KUBECONFIG_2" milan-local
+create_namespace "$KUBECONFIG_1" offloaded
+create_namespace "$KUBECONFIG_1" consumer-local
+create_namespace "$KUBECONFIG_2" provider-local
 
-offload_namespace "$KUBECONFIG_1" rome-offloaded
+offload_namespace "$KUBECONFIG_1" offloaded
 
-apply_resources "$KUBECONFIG_1" "$MANIFEST_1"
-apply_resources "$KUBECONFIG_2" "$MANIFEST_2"
+apply_resources "$KUBECONFIG_1" "$MANIFEST_CONSUMER"
+apply_resources "$KUBECONFIG_2" "$MANIFEST_PROVIDER"
+apply_resources "$KUBECONFIG_1" "$MANIFEST_OFFLOADED"
