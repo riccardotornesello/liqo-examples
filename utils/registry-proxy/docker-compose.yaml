@@ -1,7 +1,7 @@
 services:
   proxy:
     image: rpardini/docker-registry-proxy:0.6.5
-    container_name: docker_registry_proxy
+    container_name: liqo_registry_proxy
     ports:
       - "3128:3128"
     environment:
