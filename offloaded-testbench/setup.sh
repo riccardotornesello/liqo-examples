@@ -24,8 +24,6 @@ MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 LIQO_CLUSTER_CONFIG_CONSUMER="$here/manifests/cluster_consumer.yaml"
 LIQO_CLUSTER_CONFIG_PROVIDER="$here/manifests/cluster_provider.yaml"
 
-REGISTRY_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' liqo_registry_proxy)
-
 LIQO_REPO="https://github.com/liqotech/liqo"
 LIQO_VERSION="v1.0.1"
 
@@ -42,8 +40,8 @@ delete_all_kind_clusters
 create_kind_cluster_no_wait "$CLUSTER_NAME_1" "$KUBECONFIG_1" "$LIQO_CLUSTER_CONFIG_CONSUMER"
 create_kind_cluster_no_wait "$CLUSTER_NAME_2" "$KUBECONFIG_2" "$LIQO_CLUSTER_CONFIG_PROVIDER"
 
-register_image_cache "$CLUSTER_NAME_1" "$REGISTRY_IP"
-register_image_cache "$CLUSTER_NAME_2" "$REGISTRY_IP"
+register_image_cache "$CLUSTER_NAME_1"
+register_image_cache "$CLUSTER_NAME_2"
 
 create_resources "$KUBECONFIG_1" "$MANIFEST_CALICO_1"
 create_resources "$KUBECONFIG_1" "$MANIFEST_CALICO_2"

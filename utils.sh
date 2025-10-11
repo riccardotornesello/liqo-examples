@@ -130,10 +130,10 @@ function wait_for_nodes_ready() {
 
 function register_image_cache() {
     local cluster_name="$1"
-    local registry_ip="$2"
 
+    local registry_ip=$(get_image_cache_ip)
     local setup_url="http://$registry_ip:3128/setup/systemd"
-    
+
     info "Registering image cache for cluster \"$cluster_name\"..."
 
     curl -s "$setup_url" | sed "s/docker\.service/containerd\.service/g" | sed "/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/" > /tmp/setup_cache.sh
@@ -144,4 +144,10 @@ function register_image_cache() {
     done
 
     success_clear_line "Image cache registered for cluster \"$cluster_name\"."
+}
+
+function get_image_cache_ip() {
+    container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "liqo_registry_proxy")
+
+    echo "$container_ip"
 }
