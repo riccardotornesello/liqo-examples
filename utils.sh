@@ -1,18 +1,17 @@
 function delete_all_kind_clusters() {
     info "Deleting all kind clusters..."
 
-    clusters=$(kind get clusters)
-
-    if [ -z "$clusters" ]; then
-        success_clear_line "No kind clusters found."
-        return 0
-    fi
-
-    for cluster in $clusters; do
-        kind delete cluster --name "$cluster" > /dev/null 2>&1
-    done
+    fail_on_error "kind delete clusters --all" "Failed to delete all kind clusters"
 
     success_clear_line "All kind clusters have been deleted."
+}
+
+function delete_all_k3d_clusters() {
+    info "Deleting all k3d clusters..."
+
+    fail_on_error "k3d cluster delete --all" "Failed to delete all k3d clusters"
+
+    success_clear_line "All k3d clusters have been deleted."
 }
 
 function apply_resources() {
@@ -51,13 +50,23 @@ function create_kind_cluster_no_wait() {
 function peer_clusters() {
     local kubeconfig="$1"
     local remote_kubeconfig="$2"
+    local gw_server_service_type="${3-}"
+    local server_ip="${4-}"
+
+    arguments=()
+    if [ -n "$gw_server_service_type" ]; then
+        arguments+=("--gateway-server-service-type $gw_server_service_type")
+    fi
+    if [ -n "$server_ip" ]; then
+        arguments+=("--gw-server-service-loadbalancerip $server_ip")
+    fi
 
     info "Peering clusters..."
 
     fail_on_error "liqoctl peer \
         --kubeconfig $kubeconfig \
         --remote-kubeconfig $remote_kubeconfig \
-        --gw-server-service-type NodePort" "Failed to peer clusters"
+        ${arguments[@]}" "Failed to peer clusters"
 
     success_clear_line "Clusters have been peered."
 }
@@ -84,7 +93,7 @@ function offload_namespace() {
     success_clear_line "Namespace \"$name\" offloaded successfully."
 }
 
-function install_liqo_version() {
+function install_liqo_kind_version() {
     local cluster_name="$1"
     local kubeconfig="$2"
     local commit_sha="$3"
@@ -120,11 +129,16 @@ function install_liqo_k3d_version() {
         service_cidr="10.43.0.0/16"
     fi
 
-    # Set the --values argument if a values file is provided
+    # Set the --repo-url, --version, and --values arguments if provided
+    arguments=()
+    if [ -n "$repo_url" ]; then
+        arguments+=("--repo-url $repo_url")
+    fi
+    if [ -n "$commit_sha" ]; then
+        arguments+=("--version $commit_sha")
+    fi
     if [ -n "$values_file" ]; then
-        values_arg="--values $values_file"
-    else
-        values_arg=""
+        arguments+=("--values $values_file")
     fi
 
     info "Installing liqo on cluster \"$cluster_name\"..."
@@ -139,10 +153,8 @@ function install_liqo_k3d_version() {
         --pod-cidr $pod_cidr \
         --service-cidr $service_cidr \
         --api-server-url https://$api_server_address:6443 \
-        --version $commit_sha \
-        --repo-url $repo_url \
         --kubeconfig $kubeconfig \
-        $values_arg" "Failed to install liqo on cluster \"${cluster_name}\""
+        ${arguments[@]}" "Failed to install liqo on cluster \"${cluster_name}\""
 
     success_clear_line "Liqo has been installed on cluster \"$cluster_name\"."
 }
@@ -175,7 +187,7 @@ function wait_for_nodes_ready() {
 function register_image_cache() {
     local cluster_name="$1"
 
-    local registry_ip=$(get_image_cache_ip)
+    local registry_ip=$(get_image_cache_ip "liqo_registry_proxy")
     local setup_url="http://$registry_ip:3128/setup/systemd"
 
     info "Registering image cache for cluster \"$cluster_name\"..."
@@ -190,8 +202,10 @@ function register_image_cache() {
     success_clear_line "Image cache registered for cluster \"$cluster_name\"."
 }
 
-function get_image_cache_ip() {
-    container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "liqo_registry_proxy")
+function get_container_ip() {
+    local container_name="$1"
+
+    container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_name")
 
     echo "$container_ip"
 }
