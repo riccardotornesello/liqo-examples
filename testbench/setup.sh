@@ -123,14 +123,26 @@ function setup_k3d() {
     delete_all_k3d_clusters
 
     # 2. Create the clusters
-    # TODO: setup the cache
-    if [ "$CNI_PLUGIN" == "flannel" ]; then
-        create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml"
-        create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml"
-    else
-        create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml" "--flannel-backend=none@server:*" "--disable-network-policy@server:*"
-        create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml" "--flannel-backend=none@server:*" "--disable-network-policy@server:*"
+    options=()
+
+    if [ "$CNI_PLUGIN" == "calico" ]; then
+        options+=("--k3s-arg" "--flannel-backend=none@server:*")
+        options+=("--k3s-arg" "--disable-network-policy@server:*")
     fi
+
+    if [ "$CACHE_ENABLED" == "y" ]; then
+        local PROXY_HOST=$(get_container_ip "liqo_registry_proxy")
+        local PROXY_PORT=3128
+        local REGISTRY_DIR="$here/../registry-proxy"
+
+        options+=("--env" "HTTP_PROXY=http://$PROXY_HOST:$PROXY_PORT@all")
+        options+=("--env" "HTTPS_PROXY=http://$PROXY_HOST:$PROXY_PORT@all")
+        options+=("--env" "NO_PROXY=localhost,127.0.0.1,0.0.0.0,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.local,.svc@all")
+        options+=("--volume" "$REGISTRY_DIR/docker_mirror_certs/ca.crt:/etc/ssl/certs/registry-proxy-ca.pem")
+    fi
+
+    create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml" "$options"
+    create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml" "$options"
 
     # 3. Save the kubeconfig files
     K3D_KUBECONFIG_CONSUMER_LOCATION=$(get_k3d_kubeconfig $CLUSTER_NAME_CONSUMER)

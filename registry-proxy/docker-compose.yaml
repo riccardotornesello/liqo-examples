@@ -11,8 +11,8 @@ services:
       - ./docker_mirror_certs:/ca
     restart: unless-stopped
     networks:
-      - kind
+      - virtual-cluster
 
 networks:
-  kind:
+  virtual-cluster:
     external: true
