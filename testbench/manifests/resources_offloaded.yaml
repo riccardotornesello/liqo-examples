@@ -1,0 +1,110 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: po1
+  namespace: offloaded
+  labels:
+    app: po1
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+          name: web
+  nodeSelector:
+    kubernetes.io/hostname: k3d-rome-agent-0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: po2
+  namespace: offloaded
+  labels:
+    app: po2
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+          name: web
+  nodeSelector:
+    kubernetes.io/hostname: k3d-rome-agent-1
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: po3
+  namespace: offloaded
+  labels:
+    app: po3
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+          name: web
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: liqo.io/type
+                operator: In
+                values:
+                  - virtual-node
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: so1
+  namespace: offloaded
+spec:
+  ports:
+    - name: web
+      port: 8080
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: po1
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: so2
+  namespace: offloaded
+spec:
+  ports:
+    - name: web
+      port: 8080
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: po2
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: so3
+  namespace: offloaded
+spec:
+  ports:
+    - name: web
+      port: 8080
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: po3
+  type: ClusterIP

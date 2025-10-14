@@ -104,6 +104,50 @@ function install_liqo_version() {
     success_clear_line "Liqo has been installed on cluster \"$cluster_name\"."
 }
 
+function install_liqo_k3d_version() {
+    local cluster_name="$1"
+    local kubeconfig="$2"
+    local pod_cidr="$3"
+    local service_cidr="$4"
+    local repo_url="$5"
+    local commit_sha="$6"
+    local values_file="$7"
+
+    if [ -z "$pod_cidr" ]; then
+        pod_cidr="10.42.0.0/16"
+    fi
+    if [ -z "$service_cidr" ]; then
+        service_cidr="10.43.0.0/16"
+    fi
+
+    # Set the --values argument if a values file is provided
+    if [ -n "$values_file" ]; then
+        values_arg="--values $values_file"
+    else
+        values_arg=""
+    fi
+
+    info "Installing liqo on cluster \"$cluster_name\"..."
+
+    shift 7
+    labels="$*"
+
+    api_server_address=$(kubectl get nodes --kubeconfig "$kubeconfig" --selector=node-role.kubernetes.io/master -o jsonpath='{$.items[*].status.addresses[?(@.type=="InternalIP")].address}')
+
+    fail_on_error "liqoctl install k3s --cluster-id $cluster_name \
+        --cluster-labels=$(join_by , "${labels[@]}") \
+        --pod-cidr $pod_cidr \
+        --service-cidr $service_cidr \
+        --api-server-url https://$api_server_address:6443 \
+        --version $commit_sha \
+        --repo-url $repo_url \
+        --kubeconfig $kubeconfig \
+        $values_arg" "Failed to install liqo on cluster \"${cluster_name}\""
+
+    success_clear_line "Liqo has been installed on cluster \"$cluster_name\"."
+}
+
+
 function wait_for_nodes_ready() {
     local kubeconfig="$1"
     local timeout="${2:-300}"  # Default 5 minutes timeout
@@ -150,4 +194,8 @@ function get_image_cache_ip() {
     container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "liqo_registry_proxy")
 
     echo "$container_ip"
+}
+
+function question() {
+    echo -e "${BLUE}${BOLD}▶ $1${RESET}"
 }

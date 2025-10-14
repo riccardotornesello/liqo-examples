@@ -1,0 +1,3 @@
+common:
+  nodeSelector:
+      kubernetes.io/hostname: k3d-rome-agent-0

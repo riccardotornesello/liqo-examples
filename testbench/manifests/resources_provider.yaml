@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pp1
+  namespace: provider-local
+  labels:
+    app: pp1
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+          name: web
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sp1
+  namespace: provider-local
+spec:
+  ports:
+    - name: web
+      port: 8080
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: pp1
+  type: ClusterIP
