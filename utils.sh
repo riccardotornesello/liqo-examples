@@ -1,3 +1,22 @@
+function create_k3d_cluster() {
+    local name="$1"
+    local config="$2"
+
+    shift 2
+    options="$*"
+
+    arguments=()
+    for option in $options; do
+        arguments+=("--k3s-arg" "$option")
+    done
+
+    arguments_string=$(join_by " " "${arguments[@]}")
+
+    info "Creating cluster \"$name\"..."
+    fail_on_error "k3d cluster create -c $config --kubeconfig-update-default=false $arguments_string" "Failure to create cluster \"${name}\""
+    success_clear_line "Cluster \"$name\" has been created."
+}
+
 function delete_all_kind_clusters() {
     info "Deleting all kind clusters..."
 
@@ -184,7 +203,7 @@ function wait_for_nodes_ready() {
     return 1
 }
 
-function register_image_cache() {
+function register_image_cache_kind() {
     local cluster_name="$1"
 
     local registry_ip=$(get_image_cache_ip "liqo_registry_proxy")

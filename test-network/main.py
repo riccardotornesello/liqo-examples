@@ -123,14 +123,19 @@ def test_curl(kubeconfig, namespace, pod, target_ip):
 
 clusters = {
     "consumer": ClusterConfig(
-        "rome", "liqo_kubeconf_rome", ["consumer-local", "offloaded"], ["po3"]
+        "rome",
+        "../testbench/liqo_kubeconf_rome",
+        ["consumer-local", "offloaded"],
+        ["po3"],
     ),
     "provider": ClusterConfig(
-        "milan", "liqo_kubeconf_milan", ["offloaded-rome", "provider-local"]
+        "milan",
+        "../testbench/liqo_kubeconf_milan",
+        ["offloaded-rome", "provider-local"],
     ),
 }
 
-# prepare_pods(clusters)
+prepare_pods(clusters)
 
 remapped_cidrs = {
     "consumer": get_remapped_cidr(

@@ -21,7 +21,11 @@ MANIFEST_CONSUMER="$here/manifests/resources_consumer.yaml"
 MANIFEST_PROVIDER="$here/manifests/resources_provider.yaml"
 MANIFEST_OFFLOADED="$here/manifests/resources_offloaded.yaml"
 
-CNI_PLUGINS=("flannel") # TODO: kindnet, calico, cilium
+MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/operator-crds.yaml
+MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
+MANIFEST_CALICO_3="$here/manifests/calico.yaml"
+
+CNI_PLUGINS=("flannel" "calico") # TODO: kindnet, cilium
 
 
 K8S_EXECUTOR=""
@@ -63,7 +67,7 @@ function select_cni() {
 
     select opt in "${options[@]}"; do
         case $opt in
-            "flannel")
+            "flannel"|"calico")
                 CNI_PLUGIN=$opt
                 success "✔ CNI selected: $CNI_PLUGIN"
                 break
@@ -119,8 +123,14 @@ function setup_k3d() {
     delete_all_k3d_clusters
 
     # 2. Create the clusters
-    create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml"
-    create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml"
+    # TODO: setup the cache
+    if [ "$CNI_PLUGIN" == "flannel" ]; then
+        create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml"
+        create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml"
+    else
+        create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml" "--flannel-backend=none@server:*" "--disable-network-policy@server:*"
+        create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml" "--flannel-backend=none@server:*" "--disable-network-policy@server:*"
+    fi
 
     # 3. Save the kubeconfig files
     K3D_KUBECONFIG_CONSUMER_LOCATION=$(get_k3d_kubeconfig $CLUSTER_NAME_CONSUMER)
@@ -129,7 +139,18 @@ function setup_k3d() {
     cp "$K3D_KUBECONFIG_CONSUMER_LOCATION" "$here/$KUBECONFIG_CONSUMER"
     cp "$K3D_KUBECONFIG_PROVIDER_LOCATION" "$here/$KUBECONFIG_PROVIDER"
 
-    # 4. Install Liqo
+    # 4. Install the CNI (if needed)
+    if [ "$CNI_PLUGIN" == "calico" ]; then
+        create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_1"
+        create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_2"
+        create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_3"
+
+        create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_1"
+        create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_2"
+        create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_3"
+    fi
+
+    # 5. Install Liqo
     install_liqo_k3d_version "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "" "" "$here/manifests/liqo_consumer_values.yaml"
     install_liqo_k3d_version "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
 }
@@ -171,7 +192,7 @@ function validate_cli_inputs() {
     # Validating CNI
     if [ -n "$CNI_PLUGIN" ]; then
         case "$CNI_PLUGIN" in
-            "flannel")
+            "flannel"|"calico")
                 success "✔ CNI specified by argument: $CNI_PLUGIN"
                 ;;
             *)
@@ -221,14 +242,17 @@ function main() {
         select_cni
     fi
 
-    # TODO: Other interactive options
-    # select_cache_option
-    # select_resources_option
-
+    # Other interactive options
+    # TODO: add to CLI inputs
+    select_cache_option
+    select_resources_option
     # TODO: select liqo version
-    # TODO: setup based on options
+
     setup_k3d
-    setup_infrastructure
+
+    if [ "$RESOURCES_ENABLED" == "y" ]; then
+        setup_infrastructure
+    fi
 }
 
 
