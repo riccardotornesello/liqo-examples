@@ -155,6 +155,8 @@ function install_liqo_k3d_version() {
         arguments+=("--values $values_file")
     fi
 
+    arguments_string=$(join_by " " "${arguments[@]}")
+
     info "Installing liqo on cluster \"$cluster_name\"..."
 
     shift 7
@@ -167,8 +169,8 @@ function install_liqo_k3d_version() {
         --pod-cidr $pod_cidr \
         --service-cidr $service_cidr \
         --api-server-url https://$api_server_address:6443 \
-        --kubeconfig $kubeconfig \
-        ${arguments[@]}" "Failed to install liqo on cluster \"${cluster_name}\""
+        --kubeconfig $kubeconfig
+        ${arguments_string}" "Failed to install liqo on cluster \"${cluster_name}\""
 
     success_clear_line "Liqo has been installed on cluster \"$cluster_name\"."
 }
@@ -226,4 +228,16 @@ function get_container_ip() {
 
 function question() {
     echo -e "${BLUE}${BOLD}▶ $1${RESET}"
+}
+
+function install_cilium() {
+    local kubeconfig="$1"
+    local values_file="$2"
+    local version="${3:-1.18.2}"
+
+    info "Installing Cilium..."
+
+    fail_on_error "cilium install --kubeconfig $kubeconfig --version $version --values $values_file" "Failed to install Cilium"
+
+    success_clear_line "Cilium has been installed."
 }

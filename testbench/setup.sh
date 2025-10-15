@@ -25,7 +25,9 @@ MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3
 MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
 MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 
-CNI_PLUGINS=("flannel" "calico") # TODO: kindnet, cilium
+CILIUM_VALUES_FILE="$here/manifests/cilium_values.yaml"
+
+CNI_PLUGINS=("flannel" "calico" "cilium")
 
 
 K8S_EXECUTOR=""
@@ -38,7 +40,7 @@ function select_executor() {
     question "Select the Kubernetes executor"
 
     PS3="Select the executor: "
-    options=("k3d" "Exit") # TODO: kind
+    options=("k3d" "Exit")
 
     select opt in "${options[@]}"; do
         case $opt in
@@ -67,7 +69,7 @@ function select_cni() {
 
     select opt in "${options[@]}"; do
         case $opt in
-            "flannel"|"calico")
+            "flannel"|"calico"|"cilium")
                 CNI_PLUGIN=$opt
                 success "✔ CNI selected: $CNI_PLUGIN"
                 break
@@ -118,14 +120,18 @@ function select_resources_option() {
 
 function setup_k3d() {
     # 1. Prepare the environment
-    check_requirements "k3d"
+    requirements=("k3d")
+    if [ "$CNI_PLUGIN" == "cilium" ]; then
+        requirements+=("cilium")
+    fi
+    check_requirements "${requirements[@]}"
 
     delete_all_k3d_clusters
 
     # 2. Create the clusters
     options=()
 
-    if [ "$CNI_PLUGIN" == "calico" ]; then
+    if [ "$CNI_PLUGIN" != "flannel" ]; then
         options+=("--k3s-arg" "--flannel-backend=none@server:*")
         options+=("--k3s-arg" "--disable-network-policy@server:*")
     fi
@@ -162,8 +168,13 @@ function setup_k3d() {
         create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_3"
     fi
 
+    if [ "$CNI_PLUGIN" == "cilium" ]; then
+        install_cilium "$KUBECONFIG_CONSUMER" "$CILIUM_VALUES_FILE"
+        install_cilium "$KUBECONFIG_PROVIDER" "$CILIUM_VALUES_FILE"
+    fi
+
     # 5. Install Liqo
-    install_liqo_k3d_version "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "" "" "$here/manifests/liqo_consumer_values.yaml"
+    install_liqo_k3d_version "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
     install_liqo_k3d_version "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
 }
 
@@ -204,11 +215,37 @@ function validate_cli_inputs() {
     # Validating CNI
     if [ -n "$CNI_PLUGIN" ]; then
         case "$CNI_PLUGIN" in
-            "flannel"|"calico")
+            "flannel"|"calico"|"cilium")
                 success "✔ CNI specified by argument: $CNI_PLUGIN"
                 ;;
             *)
                 error "Invalid value for --cni. Valid options are ${CNI_PLUGINS[*],,}."
+                exit 1
+                ;;
+        esac
+    fi
+
+    # Validating cache option
+    if [ -n "$CACHE_ENABLED" ]; then
+        case "$CACHE_ENABLED" in
+            "y"|"n")
+                success "✔ Cache option specified by argument: $CACHE_ENABLED"
+                ;;
+            *)
+                error "Invalid value for --cache. Valid options are 'y' or 'n'."
+                exit 1
+                ;;
+        esac
+    fi
+
+    # Validating resources option
+    if [ -n "$RESOURCES_ENABLED" ]; then
+        case "$RESOURCES_ENABLED" in
+            "y"|"n")
+                success "✔ Resources option specified by argument: $RESOURCES_ENABLED"
+                ;;
+            *)
+                error "Invalid value for --resources. Valid options are 'y' or 'n'."
                 exit 1
                 ;;
         esac
@@ -227,6 +264,14 @@ function main() {
             ;;
             --cni)
             CNI_PLUGIN=$2
+            shift; shift
+            ;;
+            --cache)
+            CACHE_ENABLED=$2
+            shift; shift
+            ;;
+            --resources)
+            RESOURCES_ENABLED=$2
             shift; shift
             ;;
             *)
@@ -254,10 +299,14 @@ function main() {
         select_cni
     fi
 
-    # Other interactive options
-    # TODO: add to CLI inputs
-    select_cache_option
-    select_resources_option
+    if [ -z "$CACHE_ENABLED" ]; then
+        select_cache_option
+    fi
+
+    if [ -z "$RESOURCES_ENABLED" ]; then
+        select_resources_option
+    fi
+
     # TODO: select liqo version
 
     setup_k3d

@@ -8,7 +8,7 @@ metadata:
 spec:
   containers:
     - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.1.0
+      image: riccardotornesello/hello-world-http-server:v1.2.1-tester
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 8080

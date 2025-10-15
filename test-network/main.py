@@ -51,43 +51,6 @@ class ClusterConfig:
         return services, service_ips
 
 
-def prepare_pods(clusters):
-    # TODO: parallelize
-
-    def install_utils(kubeconfig, namespace, pod):
-        kube_client = client.CoreV1Api(
-            api_client=config.new_client_from_config(kubeconfig)
-        )
-
-        exec_command = [
-            "/bin/sh",
-            "-c",
-            "apt-get update && apt-get install -y iputils-ping curl",
-        ]
-        resp = stream.stream(
-            kube_client.connect_get_namespaced_pod_exec,
-            pod,
-            namespace,
-            command=exec_command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        return resp
-
-    for cluster in clusters.values():
-        for namespace, pods in cluster.pods.items():
-            for pod in pods:
-                if pod in cluster.offloaded_pods:
-                    continue
-
-                print(
-                    f"Preparing pod {pod} in namespace {namespace} of cluster {cluster.name}"
-                )
-                install_utils(cluster.kubeconfig, namespace, pod)
-
-
 def test_curl(kubeconfig, namespace, pod, target_ip):
     kube_client = client.CoreV1Api(api_client=config.new_client_from_config(kubeconfig))
 
@@ -134,8 +97,6 @@ clusters = {
         ["offloaded-rome", "provider-local"],
     ),
 }
-
-prepare_pods(clusters)
 
 remapped_cidrs = {
     "consumer": get_remapped_cidr(
