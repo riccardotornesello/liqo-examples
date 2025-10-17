@@ -69,7 +69,7 @@ function peer_clusters() {
 
     arguments=()
     if [ -n "$gw_server_service_type" ]; then
-        arguments+=("--gateway-server-service-type $gw_server_service_type")
+        arguments+=("--gw-server-service-type $gw_server_service_type")
     fi
     if [ -n "$server_ip" ]; then
         arguments+=("--gw-server-service-loadbalancerip $server_ip")
