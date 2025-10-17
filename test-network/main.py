@@ -68,7 +68,7 @@ def test_curl(kubeconfig, namespace, pod, target_ip):
                 "/dev/null",
                 "-w",
                 "%{http_code}",
-                f"http://{target_ip}:8080",
+                f"http://{target_ip}:80",
             ],
             stderr=True,
             stdin=False,
