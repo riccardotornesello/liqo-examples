@@ -63,6 +63,32 @@ spec:
 
 ---
 apiVersion: v1
+kind: Pod
+metadata:
+  name: po4
+  namespace: offloaded
+  labels:
+    app: po4
+spec:
+  containers:
+    - name: tester
+      image: riccardotornesello/hello-world-http-server:v1.2.1-tester
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 80
+          name: web
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: liqo.io/type
+                operator: In
+                values:
+                  - virtual-node
+
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: so1
@@ -107,4 +133,20 @@ spec:
       targetPort: web
   selector:
     app: po3
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: so4
+  namespace: offloaded
+spec:
+  ports:
+    - name: web
+      port: 80
+      protocol: TCP
+      targetPort: web
+  selector:
+    app: po4
   type: ClusterIP

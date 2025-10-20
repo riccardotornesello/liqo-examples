@@ -2,11 +2,12 @@
 
 import os
 from tabulate import tabulate
-from kubernetes import client, config, stream
+from kubernetes import client, config
 
 from pods import get_pod_ip
 from services import get_service_ip
 from network import get_remapped_cidr
+from tests import test_curl, test_ping
 
 
 class ClusterConfig:
@@ -51,45 +52,12 @@ class ClusterConfig:
         return services, service_ips
 
 
-def test_curl(kubeconfig, namespace, pod, target_ip):
-    kube_client = client.CoreV1Api(api_client=config.new_client_from_config(kubeconfig))
-
-    try:
-        resp = stream.stream(
-            kube_client.connect_get_namespaced_pod_exec,
-            pod,
-            namespace,
-            command=[
-                "curl",
-                "-m",
-                "1",
-                "-s",
-                "-o",
-                "/dev/null",
-                "-w",
-                "%{http_code}",
-                f"http://{target_ip}:80",
-            ],
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False,
-        )
-        if resp == "200":
-            # TODO: check if the hostname in the response body is correct
-            return True
-        else:
-            return False
-    except Exception as e:
-        return False
-
-
 clusters = {
     "consumer": ClusterConfig(
         "rome",
         "../testbench/liqo_kubeconf_rome",
         ["consumer-local", "offloaded"],
-        ["po3"],
+        ["po3", "po4"],
     ),
     "provider": ClusterConfig(
         "milan",
@@ -172,7 +140,10 @@ for source in sources:
             results[source["name"]].append(None)
             continue
 
-        if destination["type"] == "service" and source["cluster"] != destination["cluster"]:
+        if (
+            destination["type"] == "service"
+            and source["cluster"] != destination["cluster"]
+        ):
             results[source["name"]].append(None)
             continue
 
@@ -185,8 +156,11 @@ for source in sources:
             target_ip[1] = target_remap_cidr[1]
             target_ip = ".".join(target_ip)
 
+        curl_success = None
+        ping_success = None
+
         print(
-            f"Testing connectivity from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
+            f"Testing curl from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
         )
         if test_curl(
             clusters[source["cluster"]].kubeconfig,
@@ -194,11 +168,29 @@ for source in sources:
             source["name"],
             target_ip,
         ):
-            results[source["name"]].append(True)
+            curl_success = True
             print("  \x1b[32mSUCCESS\x1b[0m")
         else:
-            results[source["name"]].append(False)
+            curl_success = False
             print("  \x1b[31mFAILURE\x1b[0m")
+
+        if destination["type"] != "service":
+            print(
+                f"Testing ping from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
+            )
+            if test_ping(
+                clusters[source["cluster"]].kubeconfig,
+                source["namespace"],
+                source["name"],
+                target_ip,
+            ):
+                ping_success = True
+                print("  \x1b[32mSUCCESS\x1b[0m")
+            else:
+                ping_success = False
+                print("  \x1b[31mFAILURE\x1b[0m")
+
+        results[source["name"]].append({"curl": curl_success, "ping": ping_success})
 
 
 def format_header_color(destination):
@@ -220,19 +212,31 @@ def format_header_color(destination):
     return f"\x1b[{color}m {destination_name} \x1b[0m"
 
 
-rows = [
-    [format_header_color(source)]
-    + [
-        (
-            "\x1b[42m  Y  \x1b[0m"
-            if result == True
-            else "\x1b[41m  N  \x1b[0m" if result == False else ""
-        )
-        for result in results[source["name"]]
+def get_results(test_type):
+    return [
+        [format_header_color(source)]
+        + [
+            (
+                "\x1b[42m  Y  \x1b[0m"
+                if result and result[test_type] == True
+                else (
+                    "\x1b[41m  N  \x1b[0m"
+                    if result and result[test_type] == False
+                    else ""
+                )
+            )
+            for result in results[source["name"]]
+        ]
+        for source in sources
     ]
-    for source in sources
-]
 
 
 header = ["source pod"] + [format_header_color(dest) for dest in destinations]
-print(tabulate(rows, headers=header))
+
+print()
+print("===== CURL Results =====")
+print(tabulate(get_results("curl"), headers=header))
+
+print()
+print("===== PING Results =====")
+print(tabulate(get_results("ping"), headers=header))
