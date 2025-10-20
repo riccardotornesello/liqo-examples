@@ -116,6 +116,7 @@ sources = [
         "name": p,
         "namespace": ns,
         "cluster": "consumer",
+        "type": "pod",
         "ip": clusters["consumer"].pod_ips[p],
     }
     for ns in clusters["consumer"].pods
@@ -126,6 +127,7 @@ sources = [
         "name": p,
         "namespace": ns,
         "cluster": "provider",
+        "type": "pod",
         "ip": clusters["provider"].pod_ips[p],
     }
     for ns in clusters["provider"].pods
@@ -140,6 +142,7 @@ destinations = (
             "name": s,
             "namespace": ns,
             "cluster": "consumer",
+            "type": "service",
             "ip": clusters["consumer"].service_ips[s],
         }
         for ns in clusters["consumer"].services
@@ -150,15 +153,13 @@ destinations = (
             "name": s,
             "namespace": ns,
             "cluster": "provider",
+            "type": "service",
             "ip": clusters["provider"].service_ips[s],
         }
         for ns in clusters["provider"].services
         for s in clusters["provider"].services[ns]
     ]
 )
-
-print(sources)
-print(destinations)
 
 # TODO: parallelize
 results = {}
@@ -168,6 +169,10 @@ for source in sources:
 
     for destination in destinations:
         if source["name"] == destination["name"]:
+            results[source["name"]].append(None)
+            continue
+
+        if destination["type"] == "service" and source["cluster"] != destination["cluster"]:
             results[source["name"]].append(None)
             continue
 
@@ -194,8 +199,6 @@ for source in sources:
         else:
             results[source["name"]].append(False)
             print("  \x1b[31mFAILURE\x1b[0m")
-
-print(results)
 
 
 def format_header_color(destination):
