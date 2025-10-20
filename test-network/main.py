@@ -1,55 +1,17 @@
 #!/usr/bin/env python3
 
-import os
-from tabulate import tabulate
-from kubernetes import client, config
+from time import sleep
 
-from pods import get_pod_ip
-from services import get_service_ip
+from clusters import ClusterConfig
 from network import get_remapped_cidr
-from tests import test_curl, test_ping
-
-
-class ClusterConfig:
-    def __init__(self, name, kubeconfig, namespaces, offloaded_pods=[]):
-        self.name = name
-        self.kubeconfig = kubeconfig
-        self.namespaces = namespaces
-        self.offloaded_pods = offloaded_pods
-
-        if not os.path.exists(kubeconfig):
-            raise FileNotFoundError(f"Kubeconfig file '{kubeconfig}' not found.")
-
-        self.client = client.CoreV1Api(
-            api_client=config.new_client_from_config(kubeconfig)
-        )
-
-        self.pods, self.pod_ips = self.get_pods()
-        self.services, self.service_ips = self.get_services()
-
-    def get_pods(self):
-        pods = {}
-        pod_ips = {}
-
-        for ns in self.namespaces:
-            pod_list = self.client.list_namespaced_pod(ns)
-            pods[ns] = [pod.metadata.name for pod in pod_list.items]
-            for pod in pods[ns]:
-                pod_ips[pod] = get_pod_ip(self.client, ns, pod)
-
-        return pods, pod_ips
-
-    def get_services(self):
-        services = {}
-        service_ips = {}
-
-        for ns in self.namespaces:
-            svc_list = self.client.list_namespaced_service(ns)
-            services[ns] = [svc.metadata.name for svc in svc_list.items]
-            for svc in services[ns]:
-                service_ips[svc] = get_service_ip(self.client, ns, svc)
-
-        return services, service_ips
+from resources import (
+    create_kubernetes_network_policy,
+    delete_kubernetes_network_policy,
+    EGRESS_NETWORK_POLICY,
+    GATEWAY_NETWORK_POLICY,
+)
+from tests import run_tests
+from output import print_results
 
 
 clusters = {
@@ -129,114 +91,50 @@ destinations = (
     ]
 )
 
-# TODO: parallelize
-results = {}
 
-for source in sources:
-    results[source["name"]] = []
+class TestManager:
+    def __init__(self, test_name, network_policies):
+        self.test_name = test_name
+        self.network_policies = network_policies
 
-    for destination in destinations:
-        if source["name"] == destination["name"]:
-            results[source["name"]].append(None)
-            continue
-
-        if (
-            destination["type"] == "service"
-            and source["cluster"] != destination["cluster"]
-        ):
-            results[source["name"]].append(None)
-            continue
-
-        target_ip = destination["ip"]
-        if source["cluster"] != destination["cluster"]:
-            # TODO: handle remapped CIDR other than /16
-            target_ip = target_ip.split(".")
-            target_remap_cidr = remapped_cidrs[destination["cluster"]].split(".")
-            target_ip[0] = target_remap_cidr[0]
-            target_ip[1] = target_remap_cidr[1]
-            target_ip = ".".join(target_ip)
-
-        curl_success = None
-        ping_success = None
-
-        print(
-            f"Testing curl from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
-        )
-        if test_curl(
-            clusters[source["cluster"]].kubeconfig,
-            source["namespace"],
-            source["name"],
-            target_ip,
-        ):
-            curl_success = True
-            print("  \x1b[32mSUCCESS\x1b[0m")
-        else:
-            curl_success = False
-            print("  \x1b[31mFAILURE\x1b[0m")
-
-        if destination["type"] != "service":
-            print(
-                f"Testing ping from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
-            )
-            if test_ping(
-                clusters[source["cluster"]].kubeconfig,
-                source["namespace"],
-                source["name"],
-                target_ip,
-            ):
-                ping_success = True
-                print("  \x1b[32mSUCCESS\x1b[0m")
-            else:
-                ping_success = False
-                print("  \x1b[31mFAILURE\x1b[0m")
-
-        results[source["name"]].append({"curl": curl_success, "ping": ping_success})
-
-
-def format_header_color(destination):
-    destination_name = destination["name"]
-    destination_cluster = destination["cluster"]
-
-    color = "30"
-    if destination_name.startswith("p"):
-        if destination_cluster == "consumer":
-            color = "43"
-        else:
-            color = "44"
-    elif destination_name.startswith("s"):
-        if destination_cluster == "consumer":
-            color = "45"
-        else:
-            color = "46"
-
-    return f"\x1b[{color}m {destination_name} \x1b[0m"
-
-
-def get_results(test_type):
-    return [
-        [format_header_color(source)]
-        + [
-            (
-                "\x1b[42m  Y  \x1b[0m"
-                if result and result[test_type] == True
-                else (
-                    "\x1b[41m  N  \x1b[0m"
-                    if result and result[test_type] == False
-                    else ""
+    def __enter__(self):
+        print(f"========== Setting up test: {self.test_name} ==========")
+        if self.network_policies:
+            for policy in self.network_policies:
+                create_kubernetes_network_policy(
+                    policy,
+                    clusters["provider"].kubeconfig,
                 )
-            )
-            for result in results[source["name"]]
-        ]
-        for source in sources
-    ]
+            sleep(1)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        print(f"========== Tearing down test: {self.test_name} ==========")
+        if self.network_policies:
+            for policy in self.network_policies:
+                delete_kubernetes_network_policy(
+                    policy,
+                    clusters["provider"].kubeconfig,
+                    exception_on_not_found=True,
+                )
+        sleep(1)
 
 
-header = ["source pod"] + [format_header_color(dest) for dest in destinations]
+# Cleanup previous network policy if exists
+for policy in [EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY]:
+    delete_kubernetes_network_policy(
+        policy,
+        clusters["provider"].kubeconfig,
+        exception_on_not_found=False,
+    )
+sleep(1)
 
-print()
-print("===== CURL Results =====")
-print(tabulate(get_results("curl"), headers=header))
+tests = [
+    ("Default allow all egress", []),
+    ("Deny all egress", [EGRESS_NETWORK_POLICY]),
+    ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
+]
 
-print()
-print("===== PING Results =====")
-print(tabulate(get_results("ping"), headers=header))
+for test_name, network_policies in tests:
+    with TestManager(test_name, network_policies):
+        results = run_tests(sources, destinations, clusters, remapped_cidrs)
+        print_results(results, sources, destinations)

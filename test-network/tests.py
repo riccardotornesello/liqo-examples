@@ -1,6 +1,18 @@
 from kubernetes import client, config, stream
 
 
+class TestResult:
+    def __init__(self, destination: dict):
+        self.destination = destination
+        self.results = {}
+
+    def add_result(self, test_type: str, result: bool):
+        self.results[test_type] = result
+
+    def get_result(self, test_type: str):
+        return self.results.get(test_type, None)
+
+
 def test_curl(kubeconfig, namespace, pod, target_ip):
     kube_client = client.CoreV1Api(api_client=config.new_client_from_config(kubeconfig))
 
@@ -54,3 +66,71 @@ def test_ping(kubeconfig, namespace, pod, target_ip):
             return False
     except Exception as e:
         return False
+
+
+def run_tests(sources, destinations, clusters, remapped_cidrs):
+    # TODO: parallelize
+    # TODO: use more TypedDicts and clean code
+
+    results = {}
+
+    for source in sources:
+        results[source["name"]] = {}
+
+        for destination in destinations:
+            if source["name"] == destination["name"]:
+                continue
+
+            if (
+                destination["type"] == "service"
+                and source["cluster"] != destination["cluster"]
+            ):
+                continue
+
+            results[source["name"]][destination["name"]] = TestResult(destination)
+
+            target_ip = destination["ip"]
+            if source["cluster"] != destination["cluster"]:
+                # TODO: handle remapped CIDR other than /16
+                target_ip = target_ip.split(".")
+                target_remap_cidr = remapped_cidrs[destination["cluster"]].split(".")
+                target_ip[0] = target_remap_cidr[0]
+                target_ip[1] = target_remap_cidr[1]
+                target_ip = ".".join(target_ip)
+
+            print(
+                f"Testing curl from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
+            )
+            if test_curl(
+                clusters[source["cluster"]].kubeconfig,
+                source["namespace"],
+                source["name"],
+                target_ip,
+            ):
+                results[source["name"]][destination["name"]].add_result("curl", True)
+                print("  \x1b[32mSUCCESS\x1b[0m")
+            else:
+                results[source["name"]][destination["name"]].add_result("curl", False)
+                print("  \x1b[31mFAILURE\x1b[0m")
+
+            if destination["type"] != "service":
+                print(
+                    f"Testing ping from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
+                )
+                if test_ping(
+                    clusters[source["cluster"]].kubeconfig,
+                    source["namespace"],
+                    source["name"],
+                    target_ip,
+                ):
+                    results[source["name"]][destination["name"]].add_result(
+                        "ping", True
+                    )
+                    print("  \x1b[32mSUCCESS\x1b[0m")
+                else:
+                    results[source["name"]][destination["name"]].add_result(
+                        "ping", False
+                    )
+                    print("  \x1b[31mFAILURE\x1b[0m")
+
+    return results
