@@ -5,7 +5,7 @@ set -e
 here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # shellcheck source=/dev/null
 source "$here/../../common.sh"
-source "$here/../utils.sh"
+source "$here/utils.sh"
 
 
 CLUSTER_NAME_CONSUMER=rome
@@ -174,8 +174,8 @@ function setup_k3d() {
     fi
 
     # 5. Install Liqo
-    install_liqo_k3d_version "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
-    install_liqo_k3d_version "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
+    install_liqo_k3d "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
+    install_liqo_k3d "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "" "" ""
 }
 
 

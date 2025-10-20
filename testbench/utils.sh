@@ -107,7 +107,7 @@ function offload_namespace() {
     success_clear_line "Namespace \"$name\" offloaded successfully."
 }
 
-function install_liqo_kind_version() {
+function install_liqo_kind() {
     local cluster_name="$1"
     local kubeconfig="$2"
     local commit_sha="$3"
@@ -127,7 +127,7 @@ function install_liqo_kind_version() {
     success_clear_line "Liqo has been installed on cluster \"$cluster_name\"."
 }
 
-function install_liqo_k3d_version() {
+function install_liqo_k3d() {
     local cluster_name="$1"
     local kubeconfig="$2"
     local pod_cidr="$3"
