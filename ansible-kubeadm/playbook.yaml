@@ -29,17 +29,17 @@
       args:
         creates: /etc/machine-id
 
-    # ----------------------------------------------------------------
-    # CONFIGURATION OF HOSTS FILE
-    # ----------------------------------------------------------------
-    - name: Add inventory hosts to /etc/hosts
-      ansible.builtin.blockinfile:
-        path: /etc/hosts
-        block: |
-          {% for host in groups['all'] %}
-          {{ hostvars[host]['ansible_host'] }} {{ hostvars[host]['inventory_hostname'] }}
-          {% endfor %}
-        marker: "# {mark} ANSIBLE MANAGED BLOCK"
+    # # ----------------------------------------------------------------
+    # # CONFIGURATION OF HOSTS FILE
+    # # ----------------------------------------------------------------
+    # - name: Add inventory hosts to /etc/hosts
+    #   ansible.builtin.blockinfile:
+    #     path: /etc/hosts
+    #     block: |
+    #       {% for host in groups['all'] %}
+    #       {{ hostvars[host]['ansible_host'] }} {{ hostvars[host]['inventory_hostname'] }}
+    #       {% endfor %}
+    #     marker: "# {mark} ANSIBLE MANAGED BLOCK"
 
     # ----------------------------------------------------------------
     # SYSCTL CONFIGURATION
@@ -168,12 +168,12 @@
     # ----------------------------------------------------------------
     - name: Copy kubeadm configuration file to control-plane node
       ansible.builtin.template:
-        src: kubeadm-config.yaml
+        src: assets/kubeadm-config.yaml
         dest: /root/kubeadm-config.yaml
       when: inventory_hostname in groups['controlplane']
 
     - name: Copy calico configuration file to control-plane node
       ansible.builtin.copy:
-        src: calico-config.yaml
+        src: assets/calico-config.yaml
         dest: /root/calico-config.yaml
       when: inventory_hostname in groups['controlplane']
