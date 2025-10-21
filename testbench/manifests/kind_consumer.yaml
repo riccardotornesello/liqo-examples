@@ -6,5 +6,9 @@ networking:
 nodes:
   - role: control-plane
     image: kindest/node:v1.30.0
+    labels:
+      tier: worker-1
   - role: worker
     image: kindest/node:v1.30.0
+    labels:
+      tier: worker-2

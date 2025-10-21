@@ -200,10 +200,26 @@ function wait_for_nodes_ready() {
     return 1
 }
 
+function connect_registry_proxy() {
+    local network_name="$1"
+
+    info "Connecting registry proxy..."
+
+    # Skip if already connected
+    if docker network inspect "$network_name" | grep -q liqo_registry_proxy; then
+        success_clear_line "Registry proxy already connected to docker network \"$network_name\"."
+        return
+    fi
+
+    fail_on_error "docker network connect $network_name liqo_registry_proxy" "Failed to connect registry proxy to docker network \"$network_name\""
+
+    success_clear_line "Registry proxy connected to docker network \"$network_name\"."
+}
+
 function register_image_cache_kind() {
     local cluster_name="$1"
 
-    local registry_ip=$(get_container_ip "liqo_registry_proxy")
+    local registry_ip=$(get_container_ip "liqo_registry_proxy" "kind")
     local setup_url="http://$registry_ip:3128/setup/systemd"
 
     info "Registering image cache for cluster \"$cluster_name\"..."
@@ -220,8 +236,9 @@ function register_image_cache_kind() {
 
 function get_container_ip() {
     local container_name="$1"
+    local network_name="${2:-bridge}"
 
-    container_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_name")
+    container_ip=$(docker inspect -f "{{index .NetworkSettings.Networks \"${network_name}\" \"IPAddress\"}}" "$container_name")
 
     echo "$container_ip"
 }
@@ -275,4 +292,19 @@ function check_requirements() {
             exit 1
         fi
     done
+}
+
+function create_docker_network() {
+    local network_name="$1"
+
+    info "Creating docker network \"$network_name\"..."
+
+    if [ "$(docker network ls -q -f name=^${network_name}$)" ]; then
+        success_clear_line "Docker network \"$network_name\" already exists."
+        return
+    fi
+
+    fail_on_error "docker network create $network_name" "Failed to create docker network \"$network_name\""
+
+    success_clear_line "Docker network \"$network_name\" created."
 }

@@ -8,13 +8,13 @@ metadata:
 spec:
   containers:
     - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.2.1-tester
+      image: riccardotornesello/hello-world-http-server:v2.0.0-tester
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 80
           name: web
   nodeSelector:
-    kubernetes.io/hostname: k3d-rome-agent-0
+    tier: worker-1
 
 ---
 apiVersion: v1
@@ -27,13 +27,13 @@ metadata:
 spec:
   containers:
     - name: tester
-      image: riccardotornesello/hello-world-http-server:v1.2.1-tester
+      image: riccardotornesello/hello-world-http-server:v2.0.0-tester
       imagePullPolicy: IfNotPresent
       ports:
         - containerPort: 80
           name: web
   nodeSelector:
-    kubernetes.io/hostname: k3d-rome-agent-1
+    tier: worker-2
 
 ---
 apiVersion: v1

@@ -3,8 +3,8 @@ kind: Simple
 name: milan
 image: docker.io/rancher/k3s:v1.30.2-k3s2
 servers: 1
-agents: 1
-network: kind
+agents: 2
+network: virtual-cluster-k3d
 options:
   k3s:
     extraArgs:
@@ -14,3 +14,10 @@ options:
       - arg: --service-cidr=10.201.0.0/16
         nodeFilters:
           - server:*
+    nodeLabels:
+      - label: tier=worker-1
+        nodeFilters:
+          - agent:0
+      - label: tier=worker-2
+        nodeFilters:
+          - agent:1

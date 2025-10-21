@@ -161,6 +161,8 @@ function setup_k3d() {
 
     delete_k3d_clusters "$CLUSTER_NAME_CONSUMER" "$CLUSTER_NAME_PROVIDER"
 
+    create_docker_network "virtual-cluster-k3d"
+
     # 2. Create the clusters
     options=()
 
@@ -170,7 +172,9 @@ function setup_k3d() {
     fi
 
     if [ "$CACHE_ENABLED" == "y" ]; then
-        local PROXY_HOST=$(get_container_ip "liqo_registry_proxy")
+        connect_registry_proxy "virtual-cluster-k3d"
+
+        local PROXY_HOST=$(get_container_ip "liqo_registry_proxy" "virtual-cluster-k3d")
         local PROXY_PORT=3128
         local REGISTRY_DIR="$here/../registry-proxy"
 
@@ -224,6 +228,8 @@ function setup_kind() {
 
     # 3. Register image cache (if needed)
     if [ "$CACHE_ENABLED" == "y" ]; then
+        connect_registry_proxy "kind"
+
         register_image_cache_kind "$CLUSTER_NAME_CONSUMER"
         register_image_cache_kind "$CLUSTER_NAME_PROVIDER"
     fi
