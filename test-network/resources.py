@@ -6,21 +6,34 @@ from clusters import ClusterConfig
 
 class BaseResource:
     def __init__(
-        self, body_location: str, cluster: ClusterConfig, namespace: str, name: str
+        self,
+        cluster: ClusterConfig,
+        namespace: str,
+        name: str,
+        body_location: str | None = None,
     ):
-        with open(body_location, "r", encoding="utf-8") as f:
-            self.body = yaml.safe_load(f)
-        self.body["metadata"] = self.body.get("metadata", {})
-        self.body["metadata"]["namespace"] = namespace
-        self.body["metadata"]["name"] = name
-
         self.cluster = cluster
+        self.namespace = namespace
+        self.name = name
+
+        if body_location:
+            with open(body_location, "r", encoding="utf-8") as f:
+                self.body = yaml.safe_load(f)
+            self.body["metadata"] = self.body.get("metadata", {})
+            self.body["metadata"]["namespace"] = namespace
+            self.body["metadata"]["name"] = name
 
     def create(self):
         raise NotImplementedError
 
     def delete(self, exception_on_not_found: bool = False):
         raise NotImplementedError
+
+    def set_body(self, body: dict):
+        self.body = body
+        self.body["metadata"] = self.body.get("metadata", {})
+        self.body["metadata"]["namespace"] = self.namespace
+        self.body["metadata"]["name"] = self.name
 
 
 class CustomResource(BaseResource):
@@ -35,7 +48,7 @@ class CustomResource(BaseResource):
         return api_instance.create_namespaced_custom_object(
             group=self.CR_GROUP,
             version=self.CR_VERSION,
-            namespace=self.body["metadata"]["namespace"],
+            namespace=self.namespace,
             plural=self.CR_PLURAL,
             body=self.body,
         )
@@ -49,9 +62,9 @@ class CustomResource(BaseResource):
             return api_instance.delete_namespaced_custom_object(
                 group=self.CR_GROUP,
                 version=self.CR_VERSION,
-                namespace=self.body["metadata"]["namespace"],
+                namespace=self.namespace,
                 plural=self.CR_PLURAL,
-                name=self.body["metadata"]["name"],
+                name=self.name,
             )
         except kubernetes.client.exceptions.ApiException as e:
             if e.status == 404 and not exception_on_not_found:
@@ -66,7 +79,7 @@ class NetworkPolicyResource(BaseResource):
             api_client=kubernetes.config.new_client_from_config(self.cluster.kubeconfig)
         )
         return api_instance.create_namespaced_network_policy(
-            namespace=self.body["metadata"]["namespace"], body=self.body
+            namespace=self.namespace, body=self.body
         )
 
     def delete(self, exception_on_not_found: bool = False):

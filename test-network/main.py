@@ -5,8 +5,11 @@ from time import sleep
 from network import get_remapped_cidr
 from tests import run_tests, TestManager
 from output import print_results
-from test_resources import EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY
-from resources import NetworkPolicyResource
+from test_resources import (
+    EGRESS_NETWORK_POLICY,
+    GATEWAY_NETWORK_POLICY,
+    TUNNEL_FIREWALL_RULE,
+)
 from clusters import clusters
 
 
@@ -75,14 +78,67 @@ destinations = (
 
 
 # Cleanup previous resources
-for resource in [EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY]:
+for resource in [
+    EGRESS_NETWORK_POLICY,
+    GATEWAY_NETWORK_POLICY,
+    TUNNEL_FIREWALL_RULE,
+]:
     resource.delete()
 sleep(1)
 
+# Generate dynamic test resources if needed
+# TODO: update the API to attach a chain to a specific interface
+TUNNEL_FIREWALL_RULE.set_body(
+    {
+        "apiVersion": "networking.liqo.io/v1beta1",
+        "kind": "FirewallConfiguration",
+        "metadata": {
+            "labels": {
+                "liqo.io/managed": "true",
+                "networking.liqo.io/firewall-category": "gateway",
+                "networking.liqo.io/firewall-subcategory": "fabric",
+            }
+        },
+        "spec": {
+            "table": {
+                "family": "IPV4",
+                "name": "test-table",
+                "chains": [
+                    {
+                        "hook": "forward",
+                        "name": "test-chain",
+                        "policy": "drop",
+                        "priority": 99,
+                        "type": "filter",
+                        "rules": {
+                            "filterRules": [
+                                {
+                                    "action": "accept",
+                                    "match": [
+                                        {
+                                            "dev": {
+                                                "position": "in",
+                                                "value": "liqo-tunnel",
+                                            },
+                                            "op": "neq",
+                                        }
+                                    ],
+                                }
+                            ]
+                        },
+                    }
+                ],
+            }
+        },
+    }
+)
+
+# Run tests
 tests = [
     ("Default allow all egress", []),
     ("Deny offloaded egress", [EGRESS_NETWORK_POLICY]),
     # ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
+    ("Restrict tunnel traffic", [TUNNEL_FIREWALL_RULE]),
 ]
 
 for test_name, test_resources in tests:
