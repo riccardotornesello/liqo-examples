@@ -241,3 +241,38 @@ function install_cilium() {
 
     success_clear_line "Cilium has been installed."
 }
+
+function check_requirements() {
+    if ! command -v docker &> /dev/null;
+    then
+        error "Docker engine could not be found on your system. Please install docker engine to continue: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+
+    if ! docker info &> /dev/null;
+    then
+        error "Docker is not running. Please start it to continue."
+        exit 1
+    fi
+
+    if ! command -v kubectl &> /dev/null;
+    then
+        error "Kubectl could not be found on your system. Please install kubectl to continue: https://kubernetes.io/docs/tasks/tools/#kubectl"
+        exit 1
+    fi
+
+    if ! command -v liqoctl &> /dev/null;
+    then
+        error "Liqoctl could not be found on your system. Please install liqoctl to continue"
+        exit 1
+    fi
+
+    # check for extra requirements
+    for cmd in "$@"; do
+        if ! command -v "$cmd" &> /dev/null;
+        then
+            error "Command $cmd could not be found on your system. Please install it to continue."
+            exit 1
+        fi
+    done
+}

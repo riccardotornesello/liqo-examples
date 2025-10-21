@@ -27,36 +27,41 @@ MANIFEST_CALICO_3="$here/manifests/calico.yaml"
 
 CILIUM_VALUES_FILE="$here/manifests/cilium_values.yaml"
 
-CNI_PLUGINS=("flannel" "calico" "cilium")
+K8S_ENVIRONMENTS=("k3d" "kind")
+CNI_PLUGINS=("flannel" "calico" "cilium" "kindnet")
+
+declare -A ENVIRONMENT_COMPATIBILITY
+ENVIRONMENT_COMPATIBILITY[k3d]="flannel calico cilium"
+ENVIRONMENT_COMPATIBILITY[kind]="kindnet"
+
+declare -A GATEWAY_SERVICE_TYPE
+GATEWAY_SERVICE_TYPE[k3d]="LoadBalancer"
+GATEWAY_SERVICE_TYPE[kind]="NodePort"
 
 
-K8S_EXECUTOR=""
+K8S_ENVIRONMENT=""
 CNI_PLUGIN=""
 CACHE_ENABLED=""
 RESOURCES_ENABLED=""
 
 
-function select_executor() {
-    question "Select the Kubernetes executor"
+function select_environment() {
+    question "Select the Kubernetes environment"
 
-    PS3="Select the executor: "
-    options=("k3d" "Exit")
+    local options=("${K8S_ENVIRONMENTS[@]}" "Exit")
+    PS3="Select the environment: "
 
     select opt in "${options[@]}"; do
-        case $opt in
-            "k3d")
-                K8S_EXECUTOR="k3d"
-                success "✔ Executor selected: $K8S_EXECUTOR"
-                break
-                ;;
-            "Exit")
-                echo "Quitting."
-                exit 0
-                ;;
-            *)
-                error "Invalid option: $REPLY. Please try again."
-                ;;
-        esac
+        if [[ " ${K8S_ENVIRONMENTS[@]} " =~ " $opt " ]]; then
+            K8S_ENVIRONMENT=$opt
+            success "✔ Environment selected: $K8S_ENVIRONMENT"
+            break
+        elif [[ "$opt" == "Exit" ]]; then
+            echo "Quitting."
+            exit 0
+        else
+            error "Invalid option: $REPLY. Please try again."
+        fi
     done
 }
 
@@ -64,24 +69,23 @@ function select_executor() {
 function select_cni() {
     question "Select the CNI to install"
 
+    # Filter CNI options based on selected environment
+    local compatible_cnis=(${ENVIRONMENT_COMPATIBILITY[$K8S_ENVIRONMENT]})
+
+    local options=("${compatible_cnis[@]}" "Exit")
     PS3="Select the CNI: "
-    options=("${CNI_PLUGINS[@]}" "Exit")
 
     select opt in "${options[@]}"; do
-        case $opt in
-            "flannel"|"calico"|"cilium")
-                CNI_PLUGIN=$opt
-                success "✔ CNI selected: $CNI_PLUGIN"
-                break
-                ;;
-            "Exit")
-                echo "Quitting."
-                exit 0
-                ;;
-            *)
-                error "Invalid option: $REPLY. Please try again."
-                ;;
-        esac
+        if [[ " ${compatible_cnis[@]} " =~ " $opt " ]]; then
+            CNI_PLUGIN=$opt
+            success "✔ CNI selected: $CNI_PLUGIN"
+            break
+        elif [[ "$opt" == "Exit" ]]; then
+            echo "Quitting."
+            exit 0
+        else
+            error "Invalid option: $REPLY. Please try again."
+        fi
     done
 }
 
@@ -118,6 +122,35 @@ function select_resources_option() {
 }
 
 
+function validate_environment() {
+    if [[ ! " ${K8S_ENVIRONMENTS[@]} " =~ " $K8S_ENVIRONMENT " ]]; then
+        error "Invalid Kubernetes environment: $K8S_ENVIRONMENT"
+        exit 1
+    fi
+}
+
+
+function validate_cni() {
+    local compatible_cnis=(${ENVIRONMENT_COMPATIBILITY[$K8S_ENVIRONMENT]})
+
+    if [[ ! " ${compatible_cnis[@]} " =~ " $CNI_PLUGIN " ]]; then
+        error "CNI '$CNI_PLUGIN' is not compatible with environment '$K8S_ENVIRONMENT'."
+        exit 1
+    fi
+}
+
+
+function validate_boolean_option() {
+    local option_value=$1
+    local option_name=$2
+
+    if [[ "$option_value" != "y" && "$option_value" != "n" ]]; then
+        error "Invalid value for $option_name: $option_value. Valid options are 'y' or 'n'."
+        exit 1
+    fi
+}
+
+
 function setup_k3d() {
     # 1. Prepare the environment
     requirements=("k3d")
@@ -126,7 +159,7 @@ function setup_k3d() {
     fi
     check_requirements "${requirements[@]}"
 
-    delete_all_k3d_clusters
+    delete_k3d_clusters "$CLUSTER_NAME_CONSUMER" "$CLUSTER_NAME_PROVIDER"
 
     # 2. Create the clusters
     options=()
@@ -179,9 +212,31 @@ function setup_k3d() {
 }
 
 
+function setup_kind() {
+    # 1. Prepare the environment
+    check_requirements "kind"
+
+    delete_clusters "$CLUSTER_NAME_CONSUMER" "$CLUSTER_NAME_PROVIDER"
+
+    # 2. Create the clusters
+    create_cluster "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$here/manifests/kind_consumer.yaml"
+    create_cluster "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$here/manifests/kind_provider.yaml"
+
+    # 3. Register image cache (if needed)
+    if [ "$CACHE_ENABLED" == "y" ]; then
+        register_image_cache_kind "$CLUSTER_NAME_CONSUMER"
+        register_image_cache_kind "$CLUSTER_NAME_PROVIDER"
+    fi
+
+    # 4. Install Liqo
+    install_liqo "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER"
+    install_liqo "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER"
+}
+
+
 function setup_infrastructure() {
     # 1. Peer the clusters
-    peer_clusters "$KUBECONFIG_CONSUMER" "$KUBECONFIG_PROVIDER"
+    peer_clusters "$KUBECONFIG_CONSUMER" "$KUBECONFIG_PROVIDER" "${GATEWAY_SERVICE_TYPE[$K8S_ENVIRONMENT]}"
 
     # 2. Prepare the namespaces
     create_namespace "$KUBECONFIG_CONSUMER" offloaded
@@ -198,68 +253,13 @@ function setup_infrastructure() {
 }
 
 
-function validate_cli_inputs() {
-    # Validating executor
-    if [ -n "$K8S_EXECUTOR" ]; then
-        case "$K8S_EXECUTOR" in
-            "k3d")
-                success "✔ Executor specified by argument: $K8S_EXECUTOR"
-                ;;
-            *)
-                error "Invalid value for --executor. The only supported option is 'k3d'."
-                exit 1
-                ;;
-        esac
-    fi
-
-    # Validating CNI
-    if [ -n "$CNI_PLUGIN" ]; then
-        case "$CNI_PLUGIN" in
-            "flannel"|"calico"|"cilium")
-                success "✔ CNI specified by argument: $CNI_PLUGIN"
-                ;;
-            *)
-                error "Invalid value for --cni. Valid options are ${CNI_PLUGINS[*],,}."
-                exit 1
-                ;;
-        esac
-    fi
-
-    # Validating cache option
-    if [ -n "$CACHE_ENABLED" ]; then
-        case "$CACHE_ENABLED" in
-            "y"|"n")
-                success "✔ Cache option specified by argument: $CACHE_ENABLED"
-                ;;
-            *)
-                error "Invalid value for --cache. Valid options are 'y' or 'n'."
-                exit 1
-                ;;
-        esac
-    fi
-
-    # Validating resources option
-    if [ -n "$RESOURCES_ENABLED" ]; then
-        case "$RESOURCES_ENABLED" in
-            "y"|"n")
-                success "✔ Resources option specified by argument: $RESOURCES_ENABLED"
-                ;;
-            *)
-                error "Invalid value for --resources. Valid options are 'y' or 'n'."
-                exit 1
-                ;;
-        esac
-    fi
-}
-
-
 function main() {
     # Parse command-line arguments
     while [[ $# -gt 0 ]]; do
         key="$1"
         case $key in
             --executor)
-            K8S_EXECUTOR=$2
+            K8S_ENVIRONMENT=$2
             shift; shift 
             ;;
             --cni)
@@ -287,29 +287,41 @@ function main() {
     echo -e "${YELLOW}===        Liqo Testbench Setup Script        ===${RESET}"
     echo -e "${YELLOW}=================================================${RESET}\n"
 
-    # Validate CLI inputs
-    validate_cli_inputs
-
-    # If the options were not provided as arguments, ask the user
-    if [ -z "$K8S_EXECUTOR" ]; then
-        select_executor
+    if [ -z "$K8S_ENVIRONMENT" ]; then
+        select_environment
     fi
+    validate_environment
 
     if [ -z "$CNI_PLUGIN" ]; then
         select_cni
     fi
+    validate_cni
 
     if [ -z "$CACHE_ENABLED" ]; then
         select_cache_option
     fi
+    validate_boolean_option "$CACHE_ENABLED" "cache option"
 
     if [ -z "$RESOURCES_ENABLED" ]; then
         select_resources_option
     fi
+    validate_boolean_option "$RESOURCES_ENABLED" "resources option"
 
     # TODO: select liqo version
 
-    setup_k3d
+    # Setup the clusters
+    case $K8S_ENVIRONMENT in
+        "k3d")
+            setup_k3d
+            ;;
+        "kind")
+            setup_kind
+            ;;
+        *)
+            error "Unsupported Kubernetes environment: $K8S_ENVIRONMENT"
+            exit 1
+            ;;
+    esac
 
     if [ "$RESOURCES_ENABLED" == "y" ]; then
         setup_infrastructure
