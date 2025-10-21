@@ -1,4 +1,25 @@
+from time import sleep
+
 from kubernetes import client, config, stream
+
+from resources import BaseResource
+
+
+class TestManager:
+    def __init__(self, test_name, resources: list[BaseResource] = []):
+        self.test_name = test_name
+        self.resources: list[BaseResource] = resources
+
+    def __enter__(self):
+        print(f"========== Setting up test: {self.test_name} ==========")
+        for resource in self.resources:
+            resource.create()
+        sleep(1)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        print(f"========== Tearing down test: {self.test_name} ==========")
+        for resource in self.resources:
+            resource.delete()
 
 
 class TestResult:

@@ -1,0 +1,31 @@
+apiVersion: networking.liqo.io/v1beta1
+kind: FirewallConfiguration
+metadata:
+  labels:
+    liqo.io/managed: "true"
+    networking.liqo.io/firewall-category: gateway
+    networking.liqo.io/firewall-subcategory: fabric
+spec:
+  table:
+    family: IPV4
+    name: test-table
+    chains:
+      - hook: forward
+        name: test-chain
+        policy: drop
+        priority: 99
+        type: filter
+        rules:
+          filterRules:
+            - action: accept
+              match:
+                - dev:
+                    position: in
+                    value: "liqo-tunnel"
+                  op: neq
+            - action: accept
+              match:
+                - ip:
+                    position: dst
+                    value: "10.200.1.11"
+                  op: eq

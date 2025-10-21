@@ -45,3 +45,18 @@ class ClusterConfig:
                 service_ips[svc] = get_service_ip(self.client, ns, svc)
 
         return services, service_ips
+
+
+clusters = {
+    "consumer": ClusterConfig(
+        "rome",
+        "../testbench/liqo_kubeconf_rome",
+        ["consumer-local", "offloaded"],
+        ["po3", "po4"],
+    ),
+    "provider": ClusterConfig(
+        "milan",
+        "../testbench/liqo_kubeconf_milan",
+        ["offloaded-rome", "provider-local"],
+    ),
+}

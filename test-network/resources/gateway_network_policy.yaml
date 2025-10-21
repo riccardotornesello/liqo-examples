@@ -1,0 +1,13 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+spec:
+  # Apply to all pods in the namespace
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress only to owned namespaces
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              liqo.io/remote-cluster-id: rome

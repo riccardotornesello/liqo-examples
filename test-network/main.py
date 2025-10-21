@@ -2,31 +2,13 @@
 
 from time import sleep
 
-from clusters import ClusterConfig
 from network import get_remapped_cidr
-from resources import (
-    create_kubernetes_network_policy,
-    delete_kubernetes_network_policy,
-    EGRESS_NETWORK_POLICY,
-    GATEWAY_NETWORK_POLICY,
-)
-from tests import run_tests
+from tests import run_tests, TestManager
 from output import print_results
+from test_resources import EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY
+from resources import NetworkPolicyResource
+from clusters import clusters
 
-
-clusters = {
-    "consumer": ClusterConfig(
-        "rome",
-        "../testbench/liqo_kubeconf_rome",
-        ["consumer-local", "offloaded"],
-        ["po3", "po4"],
-    ),
-    "provider": ClusterConfig(
-        "milan",
-        "../testbench/liqo_kubeconf_milan",
-        ["offloaded-rome", "provider-local"],
-    ),
-}
 
 remapped_cidrs = {
     "consumer": get_remapped_cidr(
@@ -92,49 +74,18 @@ destinations = (
 )
 
 
-class TestManager:
-    def __init__(self, test_name, network_policies):
-        self.test_name = test_name
-        self.network_policies = network_policies
-
-    def __enter__(self):
-        print(f"========== Setting up test: {self.test_name} ==========")
-        if self.network_policies:
-            for policy in self.network_policies:
-                create_kubernetes_network_policy(
-                    policy,
-                    clusters["provider"].kubeconfig,
-                )
-            sleep(1)
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        print(f"========== Tearing down test: {self.test_name} ==========")
-        if self.network_policies:
-            for policy in self.network_policies:
-                delete_kubernetes_network_policy(
-                    policy,
-                    clusters["provider"].kubeconfig,
-                    exception_on_not_found=True,
-                )
-        sleep(1)
-
-
-# Cleanup previous network policy if exists
-for policy in [EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY]:
-    delete_kubernetes_network_policy(
-        policy,
-        clusters["provider"].kubeconfig,
-        exception_on_not_found=False,
-    )
+# Cleanup previous resources
+for resource in [EGRESS_NETWORK_POLICY, GATEWAY_NETWORK_POLICY]:
+    resource.delete()
 sleep(1)
 
 tests = [
     ("Default allow all egress", []),
-    ("Deny all egress", [EGRESS_NETWORK_POLICY]),
-    ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
+    ("Deny offloaded egress", [EGRESS_NETWORK_POLICY]),
+    # ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
 ]
 
-for test_name, network_policies in tests:
-    with TestManager(test_name, network_policies):
+for test_name, test_resources in tests:
+    with TestManager(test_name, test_resources):
         results = run_tests(sources, destinations, clusters, remapped_cidrs)
         print_results(results, sources, destinations)

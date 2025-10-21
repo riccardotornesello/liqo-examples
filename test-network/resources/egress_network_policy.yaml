@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+spec:
+  # Apply to all pods in the namespace
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow egress only to pods within the same namespace
+    - to:
+        - podSelector: {}
+    # Allow egress only to remapped CIDRs
+    - to:
+        - ipBlock:
+            # TODO: make this configurable
+            cidr: 10.71.0.0/16
