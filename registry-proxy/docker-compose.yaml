@@ -10,9 +10,3 @@ services:
       - ./docker_mirror_cache:/docker_mirror_cache
       - ./docker_mirror_certs:/ca
     restart: unless-stopped
-    networks:
-      - kind
-
-networks:
-  kind:
-    external: true
