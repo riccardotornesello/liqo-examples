@@ -4,7 +4,7 @@ set -e
 
 here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-KUBECONFIG="$here/../quick-start/liqo_kubeconf_rome"
+KUBECONFIG="$here/../testbench/liqo_kubeconf_milan"
 
 BUILD_COMPONENTS=(crd-replicator fabric gateway ipam liqo-controller-manager liqoctl metric-agent proxy telemetry uninstaller virtual-kubelet webhook)
 

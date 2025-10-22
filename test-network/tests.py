@@ -108,7 +108,12 @@ def run_tests(sources, destinations, clusters, remapped_cidrs):
             ):
                 continue
 
-            results[source["name"]][destination["name"]] = TestResult(destination)
+            results[source["name"]][destination["namespace"]] = results[
+                source["name"]
+            ].get(destination["namespace"], {})
+            results[source["name"]][destination["namespace"]][destination["name"]] = (
+                TestResult(destination)
+            )
 
             target_ip = destination["ip"]
             if source["cluster"] != destination["cluster"]:
@@ -128,10 +133,14 @@ def run_tests(sources, destinations, clusters, remapped_cidrs):
                 source["name"],
                 target_ip,
             ):
-                results[source["name"]][destination["name"]].add_result("curl", True)
+                results[source["name"]][destination["namespace"]][
+                    destination["name"]
+                ].add_result("curl", True)
                 print("  \x1b[32mSUCCESS\x1b[0m")
             else:
-                results[source["name"]][destination["name"]].add_result("curl", False)
+                results[source["name"]][destination["namespace"]][
+                    destination["name"]
+                ].add_result("curl", False)
                 print("  \x1b[31mFAILURE\x1b[0m")
 
             if destination["type"] != "service":
@@ -144,14 +153,14 @@ def run_tests(sources, destinations, clusters, remapped_cidrs):
                     source["name"],
                     target_ip,
                 ):
-                    results[source["name"]][destination["name"]].add_result(
-                        "ping", True
-                    )
+                    results[source["name"]][destination["namespace"]][
+                        destination["name"]
+                    ].add_result("ping", True)
                     print("  \x1b[32mSUCCESS\x1b[0m")
                 else:
-                    results[source["name"]][destination["name"]].add_result(
-                        "ping", False
-                    )
+                    results[source["name"]][destination["namespace"]][
+                        destination["name"]
+                    ].add_result("ping", False)
                     print("  \x1b[31mFAILURE\x1b[0m")
 
     return results

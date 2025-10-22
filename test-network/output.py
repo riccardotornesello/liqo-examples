@@ -61,7 +61,11 @@ def get_formatted_results(results, sources, destinations):
     return [
         [format_header_color(source)]
         + [
-            get_result_cell(results[source["name"]].get(destination["name"]))
+            get_result_cell(
+                results[source["name"]]
+                .get(destination["namespace"], {})
+                .get(destination["name"])
+            )
             for destination in destinations
         ]
         for source in sources
