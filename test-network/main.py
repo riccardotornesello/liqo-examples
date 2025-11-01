@@ -33,6 +33,7 @@ pods = [
         cluster_name="consumer",
         type="pod",
         ip=clusters["consumer"].pod_ips[p],
+        test_suite=["ping", "curl"],
     )
     for ns in clusters["consumer"].pods
     for p in clusters["consumer"].pods[ns]
@@ -44,6 +45,7 @@ pods = [
         cluster_name="provider",
         type="pod",
         ip=clusters["provider"].pod_ips[p],
+        test_suite=["ping", "curl"],
     )
     for ns in clusters["provider"].pods
     for p in clusters["provider"].pods[ns]
@@ -57,6 +59,7 @@ services = [
         cluster_name="consumer",
         type="service",
         ip=clusters["consumer"].service_ips[s],
+        test_suite=["curl"],
     )
     for ns in clusters["consumer"].services
     for s in clusters["consumer"].services[ns]
@@ -67,6 +70,7 @@ services = [
         cluster_name="provider",
         type="service",
         ip=clusters["provider"].service_ips[s],
+        test_suite=["curl"],
     )
     for ns in clusters["provider"].services
     for s in clusters["provider"].services[ns]

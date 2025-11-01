@@ -112,6 +112,24 @@ def get_formatted_results(
     ]
 
 
+def print_test_summary(tests: list[Test]) -> None:
+    """
+    Prints a summary of test results to the console.
+    For each test, it displays the source, destination, test type, and result.
+
+    Args:
+        tests (list[Test]): List of test objects containing test results.
+    """
+    for test in tests:
+        color = "\x1b[32m" if test.result else "\x1b[31m"
+        result_str = "SUCCESS" if test.result else "FAILURE"
+        result_str = f"{color}{result_str}\x1b[0m"
+
+        print(
+            f"{test.src_name} ({test.src_ip}) -> {test.dst_name} ({test.dst_ip}) | {test.test_type}: {result_str}"
+        )
+
+
 def print_results(
     tests: list[Test],
     sources: list[TestEntity],
@@ -152,6 +170,8 @@ def print_results(
             results_dict[src_name][dst_cluster_name][dst_name] = {}
 
         results_dict[src_name][dst_cluster_name][dst_name][test_type] = test.result
+
+    print_test_summary(tests)
 
     header = ["source pod"] + [format_header_color(dest) for dest in destinations]
     rows = get_formatted_results(results_dict, sources, destinations)

@@ -1,6 +1,6 @@
 from time import sleep
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 import concurrent.futures
 
 from kubernetes import client, config, stream
@@ -72,6 +72,7 @@ class Test:
     src_namespace: str
     dst_name: str
     dst_cluster_name: str
+    dst_hostname: str
     kubeconfig_location: str
     result: bool | None = None
 
@@ -85,18 +86,19 @@ class Test:
         Raises:
             ValueError: If test_type is not "ping" or "curl".
         """
-        test_params = (
-            self.kubeconfig_location,
-            self.src_namespace,
-            self.src_name,
-            self.dst_ip,
-        )
+        test_params = {
+            "kubeconfig_location": self.kubeconfig_location,
+            "namespace": self.src_namespace,
+            "pod": self.src_name,
+            "target_ip": self.dst_ip,
+            "dst_hostname": self.dst_hostname,
+        }
 
         match self.test_type:
             case "ping":
-                self.result = test_ping(*test_params)
+                self.result = test_ping(**test_params)
             case "curl":
-                self.result = test_curl(*test_params)
+                self.result = test_curl(**test_params)
             case _:
                 raise ValueError(f"Unknown test type: {self.test_type}")
 
@@ -108,25 +110,37 @@ class TestEntity:
     cluster_name: str
     type: Literal["pod", "service"]
     ip: str
+    test_suite: list[Literal["ping", "curl"]]
 
 
-def test_curl(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool:
+def test_curl(
+    kubeconfig_location: str,
+    namespace: str,
+    pod: str,
+    target_ip: str,
+    dst_hostname: str,
+) -> bool:
     """
     Tests HTTP connectivity from a source pod to a target IP using curl.
 
     Executes a curl command in the source pod with a 1-second timeout and
-    checks if the HTTP response code is 200.
+    checks if the HTTP response code is 200 and the response body contains
+    the expected hostname string.
 
     Args:
-        kubeconfig (str): Path to the kubeconfig file.
+        kubeconfig_location (str): Path to the kubeconfig file.
         namespace (str): The namespace of the source pod.
         pod (str): The name of the source pod.
         target_ip (str): The target IP address to test connectivity to.
+        dst_hostname (str): The expected hostname in the HTTP response.
 
     Returns:
-        bool: True if the curl request succeeds with HTTP 200, False otherwise.
+        bool: True if the curl request succeeds with HTTP 200 and contains
+              the expected hostname, False otherwise.
     """
-    kube_client = client.CoreV1Api(api_client=config.new_client_from_config(kubeconfig))
+    kube_client = client.CoreV1Api(
+        api_client=config.new_client_from_config(kubeconfig_location)
+    )
 
     try:
         resp = stream.stream(
@@ -138,10 +152,8 @@ def test_curl(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool
                 "-m",
                 "1",
                 "-s",
-                "-o",
-                "/dev/null",
                 "-w",
-                "%{http_code}",
+                "\n%{http_code}",
                 f"http://{target_ip}:80",
             ],
             stderr=True,
@@ -149,16 +161,36 @@ def test_curl(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool
             stdout=True,
             tty=False,
         )
-        if resp == "200":
-            # TODO: check if the hostname in the response body is correct
-            return True
-        else:
+
+        # Split response body and status code
+        lines = resp.strip().split("\n")
+        if len(lines) < 2:
             return False
+
+        status_code = lines[-1]
+        received_hostname_str = _find_hostname_line(lines)
+
+        # Check both status code and hostname in response body
+        if status_code != "200":
+            return False
+
+        expected_hostname_str = f"Hostname: {dst_hostname}"
+        if received_hostname_str != expected_hostname_str:
+            print(
+                f"Expected hostname '{expected_hostname_str}' but got '{received_hostname_str}'"
+            )
+            return False
+
+        return True
+
     except Exception as e:
+        print("Curl test exception:", e)
         return False
 
 
-def test_ping(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool:
+def test_ping(
+    kubeconfig_location: str, namespace: str, pod: str, target_ip: str, **_: Any
+) -> bool:
     """
     Tests ICMP connectivity from a source pod to a target IP using ping.
 
@@ -166,7 +198,7 @@ def test_ping(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool
     and checks if a response is received.
 
     Args:
-        kubeconfig (str): Path to the kubeconfig file.
+        kubeconfig_location (str): Path to the kubeconfig file.
         namespace (str): The namespace of the source pod.
         pod (str): The name of the source pod.
         target_ip (str): The target IP address to test connectivity to.
@@ -174,7 +206,9 @@ def test_ping(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool
     Returns:
         bool: True if the ping succeeds (1 packet received), False otherwise.
     """
-    kube_client = client.CoreV1Api(api_client=config.new_client_from_config(kubeconfig))
+    kube_client = client.CoreV1Api(
+        api_client=config.new_client_from_config(kubeconfig_location)
+    )
 
     try:
         resp = stream.stream(
@@ -191,7 +225,9 @@ def test_ping(kubeconfig: str, namespace: str, pod: str, target_ip: str) -> bool
             return True
         else:
             return False
+
     except Exception as e:
+        print("Ping test exception:", e)
         return False
 
 
@@ -252,29 +288,20 @@ def run_tests(
                 )
 
             # Create the test list
-            tests.append(
-                Test(
-                    test_type="curl",
-                    src_ip=source.ip,
-                    dst_ip=destination.ip,
-                    src_name=source.name,
-                    src_namespace=source.namespace,
-                    dst_name=destination.name,
-                    dst_cluster_name=destination.cluster_name,
-                    kubeconfig_location=clusters[source.cluster_name].kubeconfig,
-                )
-            )
-
-            if destination.type != "service":
+            for test_type in destination.test_suite:
                 tests.append(
                     Test(
-                        test_type="curl",
+                        test_type=test_type,
                         src_ip=source.ip,
-                        dst_ip=destination.ip,
+                        dst_ip=target_ip,
                         src_name=source.name,
                         src_namespace=source.namespace,
                         dst_name=destination.name,
                         dst_cluster_name=destination.cluster_name,
+                        dst_hostname="p"
+                        + destination.name[
+                            1:
+                        ],  # In case of a service, replace the 's' with 'p' to get the pod hostname
                         kubeconfig_location=clusters[source.cluster_name].kubeconfig,
                     )
                 )
@@ -293,3 +320,17 @@ def run_tests(
                 print(f"Generated an exception: {exc}")
 
     return tests
+
+
+def _find_hostname_line(lines: list[str]) -> str | None:
+    """
+    Finds the line containing the hostname in a list of strings.
+
+    Args:
+        lines (list[str]): List of strings to search.
+
+    Returns:
+        str | None: The line containing the hostname, or None if not found.
+    """
+
+    return next((x for x in lines if x.startswith("Hostname: ")), None)
