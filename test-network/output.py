@@ -3,6 +3,21 @@ from tests import Test, TestEntity
 
 
 def format_header_color(destination: TestEntity) -> str:
+    """
+    Formats a destination entity name with ANSI color codes for terminal display.
+
+    Colors are assigned based on entity type and cluster:
+    - Pods in consumer cluster: yellow background (43)
+    - Pods in provider cluster: blue background (44)
+    - Services in consumer cluster: magenta background (45)
+    - Services in provider cluster: cyan background (46)
+
+    Args:
+        destination (TestEntity): The destination entity to format.
+
+    Returns:
+        str: The entity name wrapped with ANSI color codes.
+    """
     destination_name = destination.name
     destination_cluster = destination.cluster_name
 
@@ -21,7 +36,18 @@ def format_header_color(destination: TestEntity) -> str:
     return f"\x1b[{color}m {destination_name} \x1b[0m"
 
 
-def get_result_cell(test_results: dict | None):
+def get_result_cell(test_results: dict | None) -> str:
+    """
+    Formats test results for a single source-destination pair into a cell string.
+
+    Combines curl and ping test results into a single formatted string.
+
+    Args:
+        test_results (dict | None): Dictionary containing test results with "curl" and "ping" keys.
+
+    Returns:
+        str: Formatted string with colored result indicators for each test type.
+    """
     if not test_results:
         return ""
 
@@ -29,7 +55,19 @@ def get_result_cell(test_results: dict | None):
     return "".join([get_single_result_cell(result) for result in results_list])
 
 
-def get_single_result_cell(result: bool | None):
+def get_single_result_cell(result: bool | None) -> str:
+    """
+    Formats a single test result with ANSI color codes.
+
+    Args:
+        result (bool | None): The test result - True for success, False for failure, None for not run.
+
+    Returns:
+        str: Formatted string with color:
+            - Green background with "Y" for True
+            - Red background with "N" for False
+            - Three spaces for None
+    """
     match result:
         case True:
             return "\x1b[42m Y \x1b[0m"
@@ -43,7 +81,23 @@ def get_formatted_results(
     results: dict,
     sources: list[TestEntity],
     destinations: list[TestEntity],
-):
+) -> list[list[str]]:
+    """
+    Formats test results into a 2D list for tabular display.
+
+    Creates a matrix where each row represents a source entity and each column
+    represents a destination entity, with formatted test results in each cell.
+
+    Args:
+        results (dict): Nested dictionary of test results organized by
+            source name -> destination cluster -> destination name -> test type -> result.
+        sources (list[TestEntity]): List of source entities.
+        destinations (list[TestEntity]): List of destination entities.
+
+    Returns:
+        list[list[str]]: 2D list where each row starts with the formatted source name
+            followed by formatted result cells for each destination.
+    """
     return [
         [format_header_color(source)]
         + [
@@ -62,7 +116,22 @@ def print_results(
     tests: list[Test],
     sources: list[TestEntity],
     destinations: list[TestEntity],
-):
+) -> None:
+    """
+    Prints test results in a formatted table to the console.
+
+    Converts a list of test objects into a nested dictionary structure, then
+    formats and prints the results as a colored table with sources as rows
+    and destinations as columns.
+
+    Args:
+        tests (list[Test]): List of test objects containing test results.
+        sources (list[TestEntity]): List of source entities (rows in the table).
+        destinations (list[TestEntity]): List of destination entities (columns in the table).
+
+    Returns:
+        None: Results are printed to stdout.
+    """
     # For easier access, convert the results list into a nested dict.
     # Source name -> Destination cluster -> Destination name -> Test type -> Result
 
