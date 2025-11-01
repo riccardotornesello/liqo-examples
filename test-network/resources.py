@@ -1,18 +1,16 @@
 import kubernetes
 import yaml
 
-from clusters import ClusterConfig
-
 
 class BaseResource:
     def __init__(
         self,
-        cluster: ClusterConfig,
+        kubeconfig_path: str,
         namespace: str,
         name: str,
         body_location: str | None = None,
     ):
-        self.cluster = cluster
+        self.kubeconfig_path = kubeconfig_path
         self.namespace = namespace
         self.name = name
 
@@ -29,6 +27,9 @@ class BaseResource:
     def delete(self, exception_on_not_found: bool = False):
         raise NotImplementedError
 
+    def get(self, name: str, namespace: str):
+        raise NotImplementedError
+
     def set_body(self, body: dict):
         self.body = body
         self.body["metadata"] = self.body.get("metadata", {})
@@ -43,7 +44,7 @@ class CustomResource(BaseResource):
 
     def create(self):
         api_instance = kubernetes.client.CustomObjectsApi(
-            api_client=kubernetes.config.new_client_from_config(self.cluster.kubeconfig)
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
         return api_instance.create_namespaced_custom_object(
             group=self.CR_GROUP,
@@ -55,7 +56,7 @@ class CustomResource(BaseResource):
 
     def delete(self, exception_on_not_found: bool = False):
         api_instance = kubernetes.client.CustomObjectsApi(
-            api_client=kubernetes.config.new_client_from_config(self.cluster.kubeconfig)
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
 
         try:
@@ -72,11 +73,23 @@ class CustomResource(BaseResource):
             else:
                 raise e
 
+    def get(self):
+        api_instance = kubernetes.client.CustomObjectsApi(
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
+        )
+        return api_instance.get_namespaced_custom_object(
+            group=self.CR_GROUP,
+            version=self.CR_VERSION,
+            namespace=self.namespace,
+            plural=self.CR_PLURAL,
+            name=self.name,
+        )
+
 
 class NetworkPolicyResource(BaseResource):
     def create(self):
         api_instance = kubernetes.client.NetworkingV1Api(
-            api_client=kubernetes.config.new_client_from_config(self.cluster.kubeconfig)
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
         return api_instance.create_namespaced_network_policy(
             namespace=self.namespace, body=self.body
@@ -87,7 +100,7 @@ class NetworkPolicyResource(BaseResource):
         namespace = self.body["metadata"]["namespace"]
 
         api_instance = kubernetes.client.NetworkingV1Api(
-            api_client=kubernetes.config.new_client_from_config(self.cluster.kubeconfig)
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
 
         try:
@@ -106,3 +119,9 @@ class FirewallConfigurationResource(CustomResource):
     CR_GROUP = "networking.liqo.io"
     CR_VERSION = "v1beta1"
     CR_PLURAL = "firewallconfigurations"
+
+
+class NetworkResource(CustomResource):
+    CR_GROUP = "ipam.liqo.io"
+    CR_VERSION = "v1alpha1"
+    CR_PLURAL = "networks"

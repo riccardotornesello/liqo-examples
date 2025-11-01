@@ -1,8 +1,13 @@
 from time import sleep
+from dataclasses import dataclass
+from typing import Literal
+import concurrent.futures
 
 from kubernetes import client, config, stream
+from tqdm import tqdm
 
 from resources import BaseResource
+from network import remap_ip
 
 
 class TestManager:
@@ -14,6 +19,8 @@ class TestManager:
         print(f"========== Setting up test: {self.test_name} ==========")
         for resource in self.resources:
             resource.create()
+
+        # Wait a bit for resources to be applied
         sleep(1)
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -22,16 +29,42 @@ class TestManager:
             resource.delete()
 
 
-class TestResult:
-    def __init__(self, destination: dict):
-        self.destination = destination
-        self.results = {}
+@dataclass
+class Test:
+    test_type: Literal["ping", "curl"]
+    src_ip: str
+    dst_ip: str
+    src_name: str
+    src_namespace: str
+    dst_name: str
+    dst_cluster_name: str
+    kubeconfig_location: str
+    result: bool | None = None
 
-    def add_result(self, test_type: str, result: bool):
-        self.results[test_type] = result
+    def run(self):
+        test_params = (
+            self.kubeconfig_location,
+            self.src_namespace,
+            self.src_name,
+            self.dst_ip,
+        )
 
-    def get_result(self, test_type: str):
-        return self.results.get(test_type, None)
+        match self.test_type:
+            case "ping":
+                self.result = test_ping(*test_params)
+            case "curl":
+                self.result = test_curl(*test_params)
+            case _:
+                raise ValueError(f"Unknown test type: {self.test_type}")
+
+
+@dataclass
+class TestEntity:
+    name: str
+    namespace: str
+    cluster_name: str
+    type: Literal["pod", "service"]
+    ip: str
 
 
 def test_curl(kubeconfig, namespace, pod, target_ip):
@@ -89,78 +122,75 @@ def test_ping(kubeconfig, namespace, pod, target_ip):
         return False
 
 
-def run_tests(sources, destinations, clusters, remapped_cidrs):
-    # TODO: parallelize
-    # TODO: use more TypedDicts and clean code
-
-    results = {}
+def run_tests(
+    sources: list[TestEntity],
+    destinations: list[TestEntity],
+    clusters: dict,
+    remapped_cidrs: dict,
+    max_workers=5,
+) -> list[Test]:
+    tests: list[Test] = []
 
     for source in sources:
-        results[source["name"]] = {}
-
         for destination in destinations:
-            if source["name"] == destination["name"]:
+            # Skip testing to self
+            if source.name == destination.name:
                 continue
 
+            # Skip testing service from pod in different cluster
             if (
-                destination["type"] == "service"
-                and source["cluster"] != destination["cluster"]
+                destination.type == "service"
+                and source.cluster_name != destination.cluster_name
             ):
                 continue
 
-            results[source["name"]][destination["namespace"]] = results[
-                source["name"]
-            ].get(destination["namespace"], {})
-            results[source["name"]][destination["namespace"]][destination["name"]] = (
-                TestResult(destination)
-            )
-
-            target_ip = destination["ip"]
-            if source["cluster"] != destination["cluster"]:
-                # TODO: handle remapped CIDR other than /16
-                target_ip = target_ip.split(".")
-                target_remap_cidr = remapped_cidrs[destination["cluster"]].split(".")
-                target_ip[0] = target_remap_cidr[0]
-                target_ip[1] = target_remap_cidr[1]
-                target_ip = ".".join(target_ip)
-
-            print(
-                f"Testing curl from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
-            )
-            if test_curl(
-                clusters[source["cluster"]].kubeconfig,
-                source["namespace"],
-                source["name"],
-                target_ip,
-            ):
-                results[source["name"]][destination["namespace"]][
-                    destination["name"]
-                ].add_result("curl", True)
-                print("  \x1b[32mSUCCESS\x1b[0m")
-            else:
-                results[source["name"]][destination["namespace"]][
-                    destination["name"]
-                ].add_result("curl", False)
-                print("  \x1b[31mFAILURE\x1b[0m")
-
-            if destination["type"] != "service":
-                print(
-                    f"Testing ping from pod {source['name']} ({source['ip']}) in cluster {source['cluster']} to {destination['name']} ({destination['ip']}) in cluster {destination['cluster']} via IP {target_ip}"
-                )
-                if test_ping(
-                    clusters[source["cluster"]].kubeconfig,
-                    source["namespace"],
-                    source["name"],
+            # Remap IP if necessary
+            target_ip = destination.ip
+            if source.cluster_name != destination.cluster_name:
+                target_ip = remap_ip(
                     target_ip,
-                ):
-                    results[source["name"]][destination["namespace"]][
-                        destination["name"]
-                    ].add_result("ping", True)
-                    print("  \x1b[32mSUCCESS\x1b[0m")
-                else:
-                    results[source["name"]][destination["namespace"]][
-                        destination["name"]
-                    ].add_result("ping", False)
-                    print("  \x1b[31mFAILURE\x1b[0m")
+                    remapped_cidrs[destination.cluster_name],
+                )
 
-    return results
+            # Create the test list
+            tests.append(
+                Test(
+                    test_type="curl",
+                    src_ip=source.ip,
+                    dst_ip=destination.ip,
+                    src_name=source.name,
+                    src_namespace=source.namespace,
+                    dst_name=destination.name,
+                    dst_cluster_name=destination.cluster_name,
+                    kubeconfig_location=clusters[source.cluster_name].kubeconfig,
+                )
+            )
+
+            if destination.type != "service":
+                tests.append(
+                    Test(
+                        test_type="curl",
+                        src_ip=source.ip,
+                        dst_ip=destination.ip,
+                        src_name=source.name,
+                        src_namespace=source.namespace,
+                        dst_name=destination.name,
+                        dst_cluster_name=destination.cluster_name,
+                        kubeconfig_location=clusters[source.cluster_name].kubeconfig,
+                    )
+                )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(test.run) for test in tests]
+
+        for future in tqdm(
+            concurrent.futures.as_completed(futures),
+            total=len(futures),
+            desc="Running tests",
+        ):
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"Generated an exception: {exc}")
+
+    return tests

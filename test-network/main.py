@@ -3,7 +3,7 @@
 from time import sleep
 
 from network import get_remapped_cidr
-from tests import run_tests, TestManager
+from tests import run_tests, TestManager, TestEntity
 from output import print_results
 from test_resources import (
     EGRESS_NETWORK_POLICY,
@@ -26,56 +26,54 @@ remapped_cidrs = {
     ),
 }
 
-sources = [
-    {
-        "name": p,
-        "namespace": ns,
-        "cluster": "consumer",
-        "type": "pod",
-        "ip": clusters["consumer"].pod_ips[p],
-    }
+pods = [
+    TestEntity(
+        name=p,
+        namespace=ns,
+        cluster_name="consumer",
+        type="pod",
+        ip=clusters["consumer"].pod_ips[p],
+    )
     for ns in clusters["consumer"].pods
     for p in clusters["consumer"].pods[ns]
     if p not in clusters["consumer"].offloaded_pods
 ] + [
-    {
-        "name": p,
-        "namespace": ns,
-        "cluster": "provider",
-        "type": "pod",
-        "ip": clusters["provider"].pod_ips[p],
-    }
+    TestEntity(
+        name=p,
+        namespace=ns,
+        cluster_name="provider",
+        type="pod",
+        ip=clusters["provider"].pod_ips[p],
+    )
     for ns in clusters["provider"].pods
     for p in clusters["provider"].pods[ns]
     if p not in clusters["provider"].offloaded_pods
 ]
 
-destinations = (
-    sources
-    + [
-        {
-            "name": s,
-            "namespace": ns,
-            "cluster": "consumer",
-            "type": "service",
-            "ip": clusters["consumer"].service_ips[s],
-        }
-        for ns in clusters["consumer"].services
-        for s in clusters["consumer"].services[ns]
-    ]
-    + [
-        {
-            "name": s,
-            "namespace": ns,
-            "cluster": "provider",
-            "type": "service",
-            "ip": clusters["provider"].service_ips[s],
-        }
-        for ns in clusters["provider"].services
-        for s in clusters["provider"].services[ns]
-    ]
-)
+services = [
+    TestEntity(
+        name=s,
+        namespace=ns,
+        cluster_name="consumer",
+        type="service",
+        ip=clusters["consumer"].service_ips[s],
+    )
+    for ns in clusters["consumer"].services
+    for s in clusters["consumer"].services[ns]
+] + [
+    TestEntity(
+        name=s,
+        namespace=ns,
+        cluster_name="provider",
+        type="service",
+        ip=clusters["provider"].service_ips[s],
+    )
+    for ns in clusters["provider"].services
+    for s in clusters["provider"].services[ns]
+]
 
+sources = pods
+destinations = pods + services
 
 # Cleanup previous resources
 for resource in [

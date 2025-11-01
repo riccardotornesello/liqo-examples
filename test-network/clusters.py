@@ -1,11 +1,10 @@
 import os
 from kubernetes import client, config
 
-from pods import get_pod_ip
-from services import get_service_ip
+from network import get_pod_ip, get_service_ip
 
 
-class ClusterConfig:
+class Cluster:
     def __init__(self, name, kubeconfig, namespaces, offloaded_pods=[]):
         self.name = name
         self.kubeconfig = kubeconfig
@@ -15,46 +14,48 @@ class ClusterConfig:
         if not os.path.exists(kubeconfig):
             raise FileNotFoundError(f"Kubeconfig file '{kubeconfig}' not found.")
 
-        self.client = client.CoreV1Api(
-            api_client=config.new_client_from_config(kubeconfig)
-        )
+        self.refresh_pods()
+        self.refresh_services()
 
-        self.pods, self.pod_ips = self.get_pods()
-        self.services, self.service_ips = self.get_services()
-
-    def get_pods(self):
-        pods = {}
-        pod_ips = {}
+    def refresh_pods(self):
+        self.pods = {}
+        self.pod_ips = {}
 
         for ns in self.namespaces:
-            pod_list = self.client.list_namespaced_pod(ns)
-            pods[ns] = [pod.metadata.name for pod in pod_list.items]
-            for pod in pods[ns]:
-                pod_ips[pod] = get_pod_ip(self.client, ns, pod)
+            pod_list = client.CoreV1Api(
+                api_client=config.new_client_from_config(self.kubeconfig)
+            ).list_namespaced_pod(ns)
 
-        return pods, pod_ips
+            self.pods[ns] = [pod.metadata.name for pod in pod_list.items]
+            for pod in self.pods[ns]:
+                self.pod_ips[pod] = get_pod_ip(self.kubeconfig, ns, pod)
 
-    def get_services(self):
-        services = {}
-        service_ips = {}
+        return self.pods, self.pod_ips
+
+    def refresh_services(self):
+        self.services = {}
+        self.service_ips = {}
 
         for ns in self.namespaces:
-            svc_list = self.client.list_namespaced_service(ns)
-            services[ns] = [svc.metadata.name for svc in svc_list.items]
-            for svc in services[ns]:
-                service_ips[svc] = get_service_ip(self.client, ns, svc)
+            svc_list = client.CoreV1Api(
+                api_client=config.new_client_from_config(self.kubeconfig)
+            ).list_namespaced_service(ns)
 
-        return services, service_ips
+            self.services[ns] = [svc.metadata.name for svc in svc_list.items]
+            for svc in self.services[ns]:
+                self.service_ips[svc] = get_service_ip(self.kubeconfig, ns, svc)
+
+        return self.services, self.service_ips
 
 
 clusters = {
-    "consumer": ClusterConfig(
+    "consumer": Cluster(
         "rome",
         "../testbench/liqo_kubeconf_rome",
         ["consumer-local", "offloaded"],
         ["po3", "po4"],
     ),
-    "provider": ClusterConfig(
+    "provider": Cluster(
         "milan",
         "../testbench/liqo_kubeconf_milan",
         ["offloaded-rome", "provider-local"],
