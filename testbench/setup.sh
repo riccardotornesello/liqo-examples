@@ -97,7 +97,7 @@ function select_cni() {
 function select_cache_option() {
     question "Do you want to enable the image cache? (recommended)"
 
-    read -p "Enable image cache? [Y/n] " -n 1 -r
+    read -p "Enable image cache? [Y/n] " -r
     REPLY=${REPLY,,}
 
     if [[ $REPLY =~ ^[Nn]$ ]]; then
@@ -113,7 +113,7 @@ function select_cache_option() {
 function select_resources_option() {
     question "Do you want to create demo resources in the clusters?"
 
-    read -p "Create demo resources? [Y/n] " -n 1 -r
+    read -p "Create demo resources? [Y/n] " -r
     REPLY=${REPLY,,}
 
     if [[ $REPLY =~ ^[Nn]$ ]]; then
@@ -185,8 +185,7 @@ function save_liqo_version() {
     
     question "Do you want to save this Liqo version configuration for future use?"
     
-    read -p "Save configuration? [y/N] " -n 1 -r
-    echo
+    read -p "Save configuration? [y/N] " -r
     REPLY=${REPLY,,}
     
     if [[ $REPLY =~ ^[Yy]$ ]]; then
