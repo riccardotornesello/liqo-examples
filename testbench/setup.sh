@@ -167,7 +167,6 @@ function load_saved_versions() {
         return 0
     fi
     
-    local line_num=0
     while IFS='|' read -r repo commit; do
         # Skip empty lines and comments
         [[ -z "$repo" && -z "$commit" ]] && continue
@@ -175,7 +174,6 @@ function load_saved_versions() {
         
         SAVED_VERSIONS_REPO+=("$repo")
         SAVED_VERSIONS_COMMIT+=("$commit")
-        ((line_num++))
     done < "$CONFIG_FILE"
     
     return 0
@@ -225,6 +223,15 @@ function select_liqo_version() {
     options+=("New version")
     options+=("Exit")
     
+    # Calculate menu option numbers
+    # Option 1: Default version
+    # Options 2 to (n+1): Saved versions
+    # Option (n+2): New version
+    # Option (n+3): Exit
+    local num_saved_versions=${#SAVED_VERSIONS_REPO[@]}
+    local new_version_option=$((num_saved_versions + 2))
+    local exit_option=$((num_saved_versions + 3))
+    
     PS3="Select Liqo version: "
     select opt in "${options[@]}"; do
         case $REPLY in
@@ -235,17 +242,17 @@ function select_liqo_version() {
                 success "✔ Using default Liqo version"
                 return 0
                 ;;
-            $((${#SAVED_VERSIONS_REPO[@]} + 2)))
+            $new_version_option)
                 # New version
                 read -p "Enter Liqo repository URL: " LIQO_REPO_URL
-                read -p "Enter Liqo commit hash: " LIQO_COMMIT_ID
+                read -p "Enter Liqo commit ID: " LIQO_COMMIT_ID
                 success "✔ Custom Liqo version configured (repo: $LIQO_REPO_URL, commit: $LIQO_COMMIT_ID)"
                 
                 # Ask to save the new version
                 save_liqo_version "$LIQO_REPO_URL" "$LIQO_COMMIT_ID"
                 return 0
                 ;;
-            $((${#SAVED_VERSIONS_REPO[@]} + 3)))
+            $exit_option)
                 # Exit
                 echo "Quitting."
                 exit 0
@@ -253,7 +260,7 @@ function select_liqo_version() {
             *)
                 # Check if it's a saved version (options 2 to n+1)
                 local saved_idx=$((REPLY - 2))
-                if [[ $saved_idx -ge 0 && $saved_idx -lt ${#SAVED_VERSIONS_REPO[@]} ]]; then
+                if [[ $saved_idx -ge 0 && $saved_idx -lt $num_saved_versions ]]; then
                     LIQO_REPO_URL="${SAVED_VERSIONS_REPO[$saved_idx]}"
                     LIQO_COMMIT_ID="${SAVED_VERSIONS_COMMIT[$saved_idx]}"
                     local display_repo="${LIQO_REPO_URL:-<default>}"
