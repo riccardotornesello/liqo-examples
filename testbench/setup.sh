@@ -45,6 +45,7 @@ CACHE_ENABLED=""
 RESOURCES_ENABLED=""
 LIQO_REPO_URL=""
 LIQO_COMMIT_ID=""
+LIQO_VERSION_FROM_CLI=""
 
 CONFIG_FILE="$here/.liqo_config"
 
@@ -155,50 +156,45 @@ function validate_boolean_option() {
 }
 
 
-function select_liqo_version() {
-    question "Do you want to specify a custom Liqo version?"
-
-    read -p "Specify custom Liqo version? [y/N] " -n 1 -r
-    echo
-    REPLY=${REPLY,,}
-
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        read -p "Enter Liqo repository URL: " LIQO_REPO_URL
-        read -p "Enter Liqo commit ID: " LIQO_COMMIT_ID
-        success "✔ Custom Liqo version configured (repo: $LIQO_REPO_URL, commit: $LIQO_COMMIT_ID)"
-    else
-        LIQO_REPO_URL=""
-        LIQO_COMMIT_ID=""
-        success "✔ Using default Liqo version"
+function load_saved_versions() {
+    declare -g -a SAVED_VERSIONS_REPO
+    declare -g -a SAVED_VERSIONS_COMMIT
+    
+    SAVED_VERSIONS_REPO=()
+    SAVED_VERSIONS_COMMIT=()
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        return 0
     fi
+    
+    local line_num=0
+    while IFS='|' read -r repo commit; do
+        # Skip empty lines and comments
+        [[ -z "$repo" && -z "$commit" ]] && continue
+        [[ "$repo" =~ ^#.*$ ]] && continue
+        
+        SAVED_VERSIONS_REPO+=("$repo")
+        SAVED_VERSIONS_COMMIT+=("$commit")
+        ((line_num++))
+    done < "$CONFIG_FILE"
+    
+    return 0
 }
 
 
-function load_liqo_config() {
-    if [ -f "$CONFIG_FILE" ]; then
-        source "$CONFIG_FILE"
-        if [ -n "$SAVED_LIQO_REPO_URL" ] || [ -n "$SAVED_LIQO_COMMIT_ID" ]; then
-            info "Found saved Liqo configuration"
-            return 0
-        fi
-    fi
-    return 1
-}
-
-
-function save_liqo_config() {
+function save_liqo_version() {
+    local repo="$1"
+    local commit="$2"
+    
     question "Do you want to save this Liqo version configuration for future use?"
-
+    
     read -p "Save configuration? [y/N] " -n 1 -r
     echo
     REPLY=${REPLY,,}
-
+    
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        cat > "$CONFIG_FILE" <<EOF
-# Liqo configuration file
-SAVED_LIQO_REPO_URL="$LIQO_REPO_URL"
-SAVED_LIQO_COMMIT_ID="$LIQO_COMMIT_ID"
-EOF
+        # Append to config file
+        echo "${repo}|${commit}" >> "$CONFIG_FILE"
         success "✔ Configuration saved to $CONFIG_FILE"
     else
         info "Configuration not saved"
@@ -206,24 +202,70 @@ EOF
 }
 
 
-function use_saved_liqo_config() {
-    if load_liqo_config; then
-        question "Use saved Liqo configuration?"
-        echo "  Repository URL: ${SAVED_LIQO_REPO_URL:-<default>}"
-        echo "  Commit ID: ${SAVED_LIQO_COMMIT_ID:-<default>}"
-        
-        read -p "Use saved configuration? [Y/n] " -n 1 -r
-        echo
-        REPLY=${REPLY,,}
-
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            LIQO_REPO_URL="$SAVED_LIQO_REPO_URL"
-            LIQO_COMMIT_ID="$SAVED_LIQO_COMMIT_ID"
-            success "✔ Using saved Liqo configuration"
-            return 0
-        fi
-    fi
-    return 1
+function select_liqo_version() {
+    question "Select Liqo version"
+    
+    # Load saved versions
+    load_saved_versions
+    
+    # Build menu options
+    local options=("Default version")
+    
+    # Add saved versions to menu
+    local i
+    for i in "${!SAVED_VERSIONS_REPO[@]}"; do
+        local repo="${SAVED_VERSIONS_REPO[$i]}"
+        local commit="${SAVED_VERSIONS_COMMIT[$i]}"
+        local display_repo="${repo:-<default>}"
+        local display_commit="${commit:-<default>}"
+        options+=("Saved version $((i+1)): repo=${display_repo}, commit=${display_commit}")
+    done
+    
+    # Add new version option
+    options+=("New version")
+    options+=("Exit")
+    
+    PS3="Select Liqo version: "
+    select opt in "${options[@]}"; do
+        case $REPLY in
+            1)
+                # Default version
+                LIQO_REPO_URL=""
+                LIQO_COMMIT_ID=""
+                success "✔ Using default Liqo version"
+                return 0
+                ;;
+            $((${#SAVED_VERSIONS_REPO[@]} + 2)))
+                # New version
+                read -p "Enter Liqo repository URL: " LIQO_REPO_URL
+                read -p "Enter Liqo commit hash: " LIQO_COMMIT_ID
+                success "✔ Custom Liqo version configured (repo: $LIQO_REPO_URL, commit: $LIQO_COMMIT_ID)"
+                
+                # Ask to save the new version
+                save_liqo_version "$LIQO_REPO_URL" "$LIQO_COMMIT_ID"
+                return 0
+                ;;
+            $((${#SAVED_VERSIONS_REPO[@]} + 3)))
+                # Exit
+                echo "Quitting."
+                exit 0
+                ;;
+            *)
+                # Check if it's a saved version (options 2 to n+1)
+                local saved_idx=$((REPLY - 2))
+                if [[ $saved_idx -ge 0 && $saved_idx -lt ${#SAVED_VERSIONS_REPO[@]} ]]; then
+                    LIQO_REPO_URL="${SAVED_VERSIONS_REPO[$saved_idx]}"
+                    LIQO_COMMIT_ID="${SAVED_VERSIONS_COMMIT[$saved_idx]}"
+                    local display_repo="${LIQO_REPO_URL:-<default>}"
+                    local display_commit="${LIQO_COMMIT_ID:-<default>}"
+                    success "✔ Using saved version (repo: $display_repo, commit: $display_commit)"
+                    return 0
+                else
+                    error "Invalid option: $REPLY. Please try again."
+                fi
+                ;;
+        esac
+    done
 }
 
 
@@ -358,10 +400,12 @@ function main() {
             ;;
             --repo-url)
             LIQO_REPO_URL=$2
+            LIQO_VERSION_FROM_CLI="y"
             shift; shift
             ;;
             --commit-id)
             LIQO_COMMIT_ID=$2
+            LIQO_VERSION_FROM_CLI="y"
             shift; shift
             ;;
             *)
@@ -398,15 +442,8 @@ function main() {
     validate_boolean_option "$RESOURCES_ENABLED" "resources option"
 
     # Select Liqo version (only if not specified via command line)
-    if [ -z "$LIQO_REPO_URL" ] && [ -z "$LIQO_COMMIT_ID" ]; then
-        if ! use_saved_liqo_config; then
-            select_liqo_version
-        fi
-        
-        # Offer to save the configuration if it's custom
-        if [ -n "$LIQO_REPO_URL" ] || [ -n "$LIQO_COMMIT_ID" ]; then
-            save_liqo_config
-        fi
+    if [ -z "$LIQO_VERSION_FROM_CLI" ]; then
+        select_liqo_version
     fi
 
     # Setup the clusters
