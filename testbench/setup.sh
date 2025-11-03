@@ -168,8 +168,7 @@ function load_saved_versions() {
     fi
     
     while IFS='|' read -r repo commit; do
-        # Skip empty lines (both fields empty) and comments
-        # Note: Lines with only one field empty are considered malformed and skipped
+        # Skip entries where either field is empty (malformed entries) and comments
         [[ -z "$repo" || -z "$commit" ]] && continue
         [[ "$repo" =~ ^#.*$ ]] && continue
         
@@ -215,9 +214,8 @@ function select_liqo_version() {
     for i in "${!SAVED_VERSIONS_REPO[@]}"; do
         local repo="${SAVED_VERSIONS_REPO[$i]}"
         local commit="${SAVED_VERSIONS_COMMIT[$i]}"
-        local display_repo="${repo:-<default>}"
-        local display_commit="${commit:-<default>}"
-        options+=("Saved version $((i+1)): repo=${display_repo}, commit=${display_commit}")
+        # Note: repo and commit are guaranteed to be non-empty due to validation in load_saved_versions
+        options+=("Saved version $((i+1)): repo=${repo}, commit=${commit}")
     done
     
     # Add new version option
