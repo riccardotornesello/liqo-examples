@@ -13,15 +13,19 @@ class BaseResource:
         kubeconfig_path (str): Path to the kubeconfig file.
         namespace (str): The namespace where the resource is located.
         name (str): The name of the resource.
-        body (dict): The resource definition body.
     """
+
+    kubeconfig_path: str
+    namespace: str
+    name: str
+
+    BODY_LOCATION: str | None
 
     def __init__(
         self,
         kubeconfig_path: str,
         namespace: str,
         name: str,
-        body_location: str | None = None,
     ):
         """
         Initializes a BaseResource instance.
@@ -30,19 +34,41 @@ class BaseResource:
             kubeconfig_path (str): Path to the kubeconfig file.
             namespace (str): The namespace where the resource will be created.
             name (str): The name of the resource.
-            body_location (str | None, optional): Path to a YAML file containing the resource body.
-                If provided, the body will be loaded and metadata will be set. Defaults to None.
         """
         self.kubeconfig_path = kubeconfig_path
         self.namespace = namespace
         self.name = name
 
-        if body_location:
-            with open(body_location, "r", encoding="utf-8") as f:
-                self.body = yaml.safe_load(f)
-            self.body["metadata"] = self.body.get("metadata", {})
-            self.body["metadata"]["namespace"] = namespace
-            self.body["metadata"]["name"] = name
+    def _get_body_content(self) -> dict:
+        """
+        Generates and returns the resource body without namespace and name.
+
+        Returns:
+            dict: The resource definition body.
+        """
+
+        if self.BODY_LOCATION:
+            with open(self.BODY_LOCATION, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+
+        else:
+            raise ValueError("BODY_LOCATION must be set to load the resource body.")
+
+    def _get_body(self) -> dict:
+        """
+        Generates and returns the resource body.
+
+        Returns:
+            dict: The resource definition body.
+        """
+
+        body = self._get_body_content()
+
+        body["metadata"] = body.get("metadata", {})
+        body["metadata"]["namespace"] = self.namespace
+        body["metadata"]["name"] = self.name
+
+        return body
 
     def create(self):
         """
@@ -85,20 +111,6 @@ class BaseResource:
         """
         raise NotImplementedError
 
-    def set_body(self, body: dict) -> None:
-        """
-        Sets the resource body with the provided dictionary.
-
-        Updates the body and ensures metadata fields are properly set.
-
-        Args:
-            body (dict): The resource definition dictionary.
-        """
-        self.body = body
-        self.body["metadata"] = self.body.get("metadata", {})
-        self.body["metadata"]["namespace"] = self.namespace
-        self.body["metadata"]["name"] = self.name
-
 
 class CustomResource(BaseResource):
     """
@@ -128,12 +140,14 @@ class CustomResource(BaseResource):
         api_instance = kubernetes.client.CustomObjectsApi(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
+        body = self._get_body()
+
         return api_instance.create_namespaced_custom_object(
             group=self.CR_GROUP,
             version=self.CR_VERSION,
             namespace=self.namespace,
             plural=self.CR_PLURAL,
-            body=self.body,
+            body=body,
         )
 
     def delete(self, exception_on_not_found: bool = False):
@@ -206,8 +220,10 @@ class NetworkPolicyResource(BaseResource):
         api_instance = kubernetes.client.NetworkingV1Api(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
+        body = self._get_body()
+
         return api_instance.create_namespaced_network_policy(
-            namespace=self.namespace, body=self.body
+            namespace=self.namespace, body=body
         )
 
     def delete(self, exception_on_not_found: bool = False):
@@ -226,8 +242,8 @@ class NetworkPolicyResource(BaseResource):
             kubernetes.client.exceptions.ApiException: If deletion fails for reasons
                 other than the resource not being found (when exception_on_not_found is False).
         """
-        name = self.body["metadata"]["name"]
-        namespace = self.body["metadata"]["namespace"]
+        name = self.name
+        namespace = self.namespace
 
         api_instance = kubernetes.client.NetworkingV1Api(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)

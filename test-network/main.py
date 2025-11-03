@@ -5,13 +5,14 @@ from time import sleep
 from network import get_remapped_cidr
 from tests import run_tests, TestManager, TestEntity
 from output import print_results
-from test_resources import (
-    EGRESS_NETWORK_POLICY,
-    GATEWAY_NETWORK_POLICY,
-    TUNNEL_FIREWALL_RULE,
-)
 from clusters import clusters
+from test_resources.tunnel_firewall_rule import TunnelFirewallRuleResource
+from test_resources.egress_network_policy import EgressNetworkPolicyResource
+from test_resources.gateway_network_policy import GatewayNetworkPolicyResource
 
+######################################################
+# GENERATE TEST ENTITIES
+######################################################
 
 remapped_cidrs = {
     "consumer": get_remapped_cidr(
@@ -34,7 +35,7 @@ pods = [
         type="pod",
         ip=clusters["consumer"].pod_ips[p],
         test_suite=["ping", "curl"],
-        color="43"
+        color="43",
     )
     for ns in clusters["consumer"].pods
     for p in clusters["consumer"].pods[ns]
@@ -47,7 +48,7 @@ pods = [
         type="pod",
         ip=clusters["provider"].pod_ips[p],
         test_suite=["ping", "curl"],
-        color="44"
+        color="44",
     )
     for ns in clusters["provider"].pods
     for p in clusters["provider"].pods[ns]
@@ -62,7 +63,7 @@ services = [
         type="service",
         ip=clusters["consumer"].service_ips[s],
         test_suite=["curl"],
-        color="45"
+        color="45",
     )
     for ns in clusters["consumer"].services
     for s in clusters["consumer"].services[ns]
@@ -74,7 +75,7 @@ services = [
         type="service",
         ip=clusters["provider"].service_ips[s],
         test_suite=["curl"],
-        color="46"
+        color="46",
     )
     for ns in clusters["provider"].services
     for s in clusters["provider"].services[ns]
@@ -91,116 +92,58 @@ internet = TestEntity(
 sources = pods
 destinations = pods + services + [internet]
 
+
+######################################################
+# GENERATE TEST RESOURCES
+######################################################
+
+test_resources = {
+    "TUNNEL_FIREWALL_RULE": TunnelFirewallRuleResource(
+        kubeconfig_path=clusters["provider"].kubeconfig,
+        name="restrict-tunnel-traffic",
+        namespace="liqo-tenant-rome",
+        allowed_destination_ips=[
+            clusters["provider"].pod_ips["po3"],
+            clusters["provider"].pod_ips["po4"],
+        ],
+    ),
+    "EGRESS_NETWORK_POLICY": EgressNetworkPolicyResource(
+        kubeconfig_path=clusters["provider"].kubeconfig,
+        name="deny-egress-to-other-namespaces",
+        namespace="offloaded-rome",
+        allowed_cidrs=["10.71.0.0/16"],  # TODO: get from remapped
+    ),
+    "GATEWAY_NETWORK_POLICY": GatewayNetworkPolicyResource(
+        kubeconfig_path=clusters["provider"].kubeconfig,
+        name="deny-egress-from-gateway",
+        namespace="offloaded-rome",
+        remote_cluster_id="rome",
+    ),
+}
+
 # Cleanup previous resources
-for resource in [
-    EGRESS_NETWORK_POLICY,
-    GATEWAY_NETWORK_POLICY,
-    TUNNEL_FIREWALL_RULE,
-]:
+for resource in test_resources.values():
     resource.delete()
 sleep(1)
 
-# Generate dynamic test resources if needed
-# TODO: update the API to attach a chain to a specific interface
-# TODO: update the API to match established connections
-# TODO: update the API to match multiple IPs/CIDRs in a single rule
-TUNNEL_FIREWALL_RULE.set_body(
-    {
-        "apiVersion": "networking.liqo.io/v1beta1",
-        "kind": "FirewallConfiguration",
-        "metadata": {
-            "labels": {
-                "liqo.io/managed": "true",
-                "networking.liqo.io/firewall-category": "gateway",
-                "networking.liqo.io/firewall-subcategory": "fabric",
-            }
-        },
-        "spec": {
-            "table": {
-                "family": "IPV4",
-                "name": "test-table",
-                "chains": [
-                    {
-                        "hook": "forward",
-                        "name": "test-chain",
-                        "policy": "accept",
-                        "priority": 99,
-                        "type": "filter",
-                        "rules": {
-                            "filterRules": [
-                                {
-                                    "action": "accept",
-                                    "match": [
-                                        {
-                                            "dev": {
-                                                "position": "in",
-                                                "value": "liqo-tunnel",
-                                            },
-                                            "op": "eq",
-                                        },
-                                        {
-                                            "ip": {
-                                                "position": "dst",
-                                                "value": clusters["provider"].pod_ips[
-                                                    "po3"
-                                                ],
-                                            },
-                                            "op": "eq",
-                                        },
-                                    ],
-                                },
-                                {
-                                    "action": "accept",
-                                    "match": [
-                                        {
-                                            "dev": {
-                                                "position": "in",
-                                                "value": "liqo-tunnel",
-                                            },
-                                            "op": "eq",
-                                        },
-                                        {
-                                            "ip": {
-                                                "position": "dst",
-                                                "value": clusters["provider"].pod_ips[
-                                                    "po4"
-                                                ],
-                                            },
-                                            "op": "eq",
-                                        },
-                                    ],
-                                },
-                                {
-                                    "action": "drop",
-                                    "match": [
-                                        {
-                                            "dev": {
-                                                "position": "in",
-                                                "value": "liqo-tunnel",
-                                            },
-                                            "op": "eq",
-                                        },
-                                    ],
-                                },
-                            ]
-                        },
-                    }
-                ],
-            }
-        },
-    }
-)
+######################################################
+# RUN TESTS
+######################################################
 
-
-# Run tests
-tests = [
-    ("Default allow all egress", []),
+tests_suites = [
+    # ("Default allow all egress", []),
     # ("Deny offloaded egress", [EGRESS_NETWORK_POLICY]),
     # ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
-    # ("Provider protection", [EGRESS_NETWORK_POLICY, TUNNEL_FIREWALL_RULE]),
+    (
+        "Provider protection",
+        [
+            test_resources["EGRESS_NETWORK_POLICY"],
+            test_resources["TUNNEL_FIREWALL_RULE"],
+        ],
+    ),
 ]
 
-for test_name, test_resources in tests:
+for test_name, test_resources in tests_suites:
     with TestManager(test_name, test_resources):
         results = run_tests(sources, destinations, clusters, remapped_cidrs)
         print_results(results, sources, destinations)
