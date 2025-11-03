@@ -34,6 +34,7 @@ pods = [
         type="pod",
         ip=clusters["consumer"].pod_ips[p],
         test_suite=["ping", "curl"],
+        color="43"
     )
     for ns in clusters["consumer"].pods
     for p in clusters["consumer"].pods[ns]
@@ -46,6 +47,7 @@ pods = [
         type="pod",
         ip=clusters["provider"].pod_ips[p],
         test_suite=["ping", "curl"],
+        color="44"
     )
     for ns in clusters["provider"].pods
     for p in clusters["provider"].pods[ns]
@@ -60,6 +62,7 @@ services = [
         type="service",
         ip=clusters["consumer"].service_ips[s],
         test_suite=["curl"],
+        color="45"
     )
     for ns in clusters["consumer"].services
     for s in clusters["consumer"].services[ns]
@@ -71,13 +74,22 @@ services = [
         type="service",
         ip=clusters["provider"].service_ips[s],
         test_suite=["curl"],
+        color="46"
     )
     for ns in clusters["provider"].services
     for s in clusters["provider"].services[ns]
 ]
 
+internet = TestEntity(
+    name="internet",
+    namespace="",
+    type="external",
+    ip="8.8.8.8",
+    test_suite=["ping"],
+)
+
 sources = pods
-destinations = pods + services
+destinations = pods + services + [internet]
 
 # Cleanup previous resources
 for resource in [

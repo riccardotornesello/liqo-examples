@@ -107,10 +107,11 @@ class Test:
 class TestEntity:
     name: str
     namespace: str
-    cluster_name: str
-    type: Literal["pod", "service"]
+    type: Literal["pod", "service", "external"]
     ip: str
     test_suite: list[Literal["ping", "curl"]]
+    color: str | None = None
+    cluster_name: str | None = None
 
 
 def test_curl(
@@ -281,7 +282,10 @@ def run_tests(
 
             # Remap IP if necessary
             target_ip = destination.ip
-            if source.cluster_name != destination.cluster_name:
+            if (
+                destination.cluster_name
+                and source.cluster_name != destination.cluster_name
+            ):
                 target_ip = remap_ip(
                     target_ip,
                     remapped_cidrs[destination.cluster_name],

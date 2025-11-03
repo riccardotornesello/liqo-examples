@@ -5,12 +5,7 @@ from tests import Test, TestEntity
 def format_header_color(destination: TestEntity) -> str:
     """
     Formats a destination entity name with ANSI color codes for terminal display.
-
-    Colors are assigned based on entity type and cluster:
-    - Pods in consumer cluster: yellow background (43)
-    - Pods in provider cluster: blue background (44)
-    - Services in consumer cluster: magenta background (45)
-    - Services in provider cluster: cyan background (46)
+    Colors are assigned based on the entity's color field.
 
     Args:
         destination (TestEntity): The destination entity to format.
@@ -18,22 +13,14 @@ def format_header_color(destination: TestEntity) -> str:
     Returns:
         str: The entity name wrapped with ANSI color codes.
     """
-    destination_name = destination.name
-    destination_cluster = destination.cluster_name
+    name = destination.name
+    color = destination.color
 
-    color = "30"
-    if destination_name.startswith("p"):
-        if destination_cluster == "consumer":
-            color = "43"
-        else:
-            color = "44"
-    elif destination_name.startswith("s"):
-        if destination_cluster == "consumer":
-            color = "45"
-        else:
-            color = "46"
-
-    return f"\x1b[{color}m {destination_name} \x1b[0m"
+    if not color:
+        return f" {name} "
+    
+    else:
+        return f"\x1b[{color}m {name} \x1b[0m"
 
 
 def get_result_cell(test_results: dict | None) -> str:
