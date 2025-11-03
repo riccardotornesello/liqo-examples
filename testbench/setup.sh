@@ -45,7 +45,6 @@ CACHE_ENABLED=""
 RESOURCES_ENABLED=""
 LIQO_REPO_URL=""
 LIQO_COMMIT_ID=""
-LIQO_VERSION_FROM_CLI=""
 
 CONFIG_FILE="$here/.liqo_config"
 
@@ -407,12 +406,10 @@ function main() {
             ;;
             --repo-url)
             LIQO_REPO_URL=$2
-            LIQO_VERSION_FROM_CLI="y"
             shift; shift
             ;;
             --commit-id)
             LIQO_COMMIT_ID=$2
-            LIQO_VERSION_FROM_CLI="y"
             shift; shift
             ;;
             *)
@@ -448,8 +445,7 @@ function main() {
     fi
     validate_boolean_option "$RESOURCES_ENABLED" "resources option"
 
-    # Select Liqo version (only if not specified via command line)
-    if [ -z "$LIQO_VERSION_FROM_CLI" ]; then
+    if [ -z "$LIQO_REPO_URL" ]; then
         select_liqo_version
     fi
 
