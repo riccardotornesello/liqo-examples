@@ -168,8 +168,9 @@ function load_saved_versions() {
     fi
     
     while IFS='|' read -r repo commit; do
-        # Skip empty lines and comments
-        [[ -z "$repo" && -z "$commit" ]] && continue
+        # Skip empty lines (both fields empty) and comments
+        # Note: Lines with only one field empty are considered malformed and skipped
+        [[ -z "$repo" || -z "$commit" ]] && continue
         [[ "$repo" =~ ^#.*$ ]] && continue
         
         SAVED_VERSIONS_REPO+=("$repo")
@@ -229,6 +230,7 @@ function select_liqo_version() {
     # Option (n+2): New version
     # Option (n+3): Exit
     local num_saved_versions=${#SAVED_VERSIONS_REPO[@]}
+    local saved_versions_start_option=2
     local new_version_option=$((num_saved_versions + 2))
     local exit_option=$((num_saved_versions + 3))
     
@@ -259,7 +261,7 @@ function select_liqo_version() {
                 ;;
             *)
                 # Check if it's a saved version (options 2 to n+1)
-                local saved_idx=$((REPLY - 2))
+                local saved_idx=$((REPLY - saved_versions_start_option))
                 if [[ $saved_idx -ge 0 && $saved_idx -lt $num_saved_versions ]]; then
                     LIQO_REPO_URL="${SAVED_VERSIONS_REPO[$saved_idx]}"
                     LIQO_COMMIT_ID="${SAVED_VERSIONS_COMMIT[$saved_idx]}"
