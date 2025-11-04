@@ -60,11 +60,11 @@ class TunnelFirewallRuleResource(FirewallConfigurationResource):
             "spec": {
                 "table": {
                     "family": "IPV4",
-                    "name": "test-table",
+                    "name": "tunnel-firewall-table",
                     "chains": [
                         {
                             "hook": "forward",
-                            "name": "test-chain",
+                            "name": "tunnel-firewall-chain",
                             "policy": "accept",
                             "priority": 99,
                             "type": "filter",

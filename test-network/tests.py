@@ -155,7 +155,7 @@ def test_curl(
                 "-s",
                 "-w",
                 "\n%{http_code}",
-                f"http://{target_ip}:80",
+                f"http://{target_ip}:80?source={pod}",
             ],
             stderr=True,
             stdin=False,

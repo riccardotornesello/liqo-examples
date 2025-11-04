@@ -18,6 +18,8 @@ DEPLOYMENTS["liqo-proxy"]="proxy"
 DEPLOYMENTS["liqo-webhook"]="webhook"
 DEPLOYMENTS["liqo-controller-manager"]="liqo-controller-manager"
 
+declare -A DAEMONSETS
+DAEMONSETS["liqo-fabric"]="fabric"
 
 # Set the environment variables for the build script
 export DOCKER_REGISTRY="ttl.sh"
@@ -45,6 +47,22 @@ for deployment in "${!DEPLOYMENTS[@]}"; do
   echo "Updating deployment: $deployment, container: $container_name, image: $image_name"
   if ! kubectl --kubeconfig "$KUBECONFIG" set image "deployment/$deployment" "$container_name=$image_name" -n "$NAMESPACE"; then
     echo "Failed to update image for deployment: $deployment"
+    exit 1
+  fi
+done
+
+# Update the image for each daemonset
+for daemonset in "${!DAEMONSETS[@]}"; do
+  component="${DAEMONSETS[$daemonset]}"
+
+  # Extract the container name from the daemonset
+  container_name=$(kubectl get daemonset --kubeconfig "$KUBECONFIG" "$daemonset" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
+
+  image_name="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/${component}-ci:${DOCKER_TAG}"
+
+  echo "Updating daemonset: $daemonset, container: $container_name, image: $image_name"
+  if ! kubectl --kubeconfig "$KUBECONFIG" set image "daemonset/$daemonset" "$container_name=$image_name" -n "$NAMESPACE"; then
+    echo "Failed to update image for daemonset: $daemonset"
     exit 1
   fi
 done
