@@ -237,7 +237,7 @@ def run_tests(
     destinations: list[TestEntity],
     clusters: dict,
     remapped_cidrs: dict,
-    max_workers: int = 5,
+    max_workers: int = 10,
 ) -> list[Test]:
     """
     Runs network connectivity tests between all source and destination entities.
