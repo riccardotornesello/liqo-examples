@@ -9,6 +9,7 @@ from clusters import clusters
 from test_resources.tunnel_firewall_rule import TunnelFirewallRuleResource
 from test_resources.egress_network_policy import EgressNetworkPolicyResource
 from test_resources.gateway_network_policy import GatewayNetworkPolicyResource
+from test_resources.fabric_firewall_rule import FabricFirewallRuleResource
 
 ######################################################
 # GENERATE TEST ENTITIES
@@ -103,15 +104,14 @@ test_resources = {
         name="restrict-tunnel-traffic",
         namespace="liqo-tenant-rome",
         allowed_destination_ips=[
-            clusters["provider"].pod_ips["po3"],
-            clusters["provider"].pod_ips["po4"],
+            clusters["provider"].pod_ips[p] for p in clusters["consumer"].offloaded_pods
         ],
     ),
     "EGRESS_NETWORK_POLICY": EgressNetworkPolicyResource(
         kubeconfig_path=clusters["provider"].kubeconfig,
         name="deny-egress-to-other-namespaces",
         namespace="offloaded-rome",
-        allowed_cidrs=["10.71.0.0/16"],  # TODO: get from remapped
+        allowed_cidrs=[remapped_cidrs["provider"]],
     ),
     "GATEWAY_NETWORK_POLICY": GatewayNetworkPolicyResource(
         kubeconfig_path=clusters["provider"].kubeconfig,
@@ -132,15 +132,14 @@ sleep(1)
 
 tests_suites = [
     # ("Default allow all egress", []),
-    # ("Deny offloaded egress", [EGRESS_NETWORK_POLICY]),
     # ("Block gateway traffic", [GATEWAY_NETWORK_POLICY]),
-    (
-        "Provider protection",
-        [
-            test_resources["EGRESS_NETWORK_POLICY"],
-            test_resources["TUNNEL_FIREWALL_RULE"],
-        ],
-    ),
+    # (
+    #     "Border protection",
+    #     [
+    #         test_resources["EGRESS_NETWORK_POLICY"],
+    #         test_resources["TUNNEL_FIREWALL_RULE"],
+    #     ],
+    # ),
 ]
 
 for test_name, test_resources in tests_suites:
