@@ -274,7 +274,7 @@ function setup_k3d() {
 	create_docker_network "virtual-cluster-k3d"
 
 	# 2. Create the clusters
-	options=()
+	local options=("")
 
 	if [ "$CNI_PLUGIN" != "flannel" ]; then
 		options+=("--k3s-arg" "--flannel-backend=none@server:*")
