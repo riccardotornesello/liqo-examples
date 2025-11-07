@@ -2,9 +2,10 @@
 
 set -e
 
-here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 KUBECONFIG="$here/../testbench/liqo_kubeconf_milan"
+ROLE="provider"
 
 BUILD_COMPONENTS=(crd-replicator fabric gateway ipam liqo-controller-manager liqoctl metric-agent proxy telemetry uninstaller virtual-kubelet webhook)
 
@@ -41,7 +42,7 @@ for deployment in "${!DEPLOYMENTS[@]}"; do
 
   # Extract the container name from the deployment
   container_name=$(kubectl get deployment --kubeconfig "$KUBECONFIG" "$deployment" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
-  
+
   image_name="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/${component}-ci:${DOCKER_TAG}"
 
   echo "Updating deployment: $deployment, container: $container_name, image: $image_name"
@@ -66,5 +67,33 @@ for daemonset in "${!DAEMONSETS[@]}"; do
     exit 1
   fi
 done
+
+# Update the gateway
+GATEWAY_IMAGE_NAME="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/gateway-ci:${DOCKER_TAG}"
+if [ "$ROLE" == "provider" ]; then
+  GATEWAY_TEMPLATE_NAME="wireguard-server"
+  GATEWAY_TEMPLATE_RESOURCE="WgGatewayServerTemplate"
+
+  GATEWAY_RESOURCE_NAMESPACE="liqo-tenant-rome"
+  GATEWAY_RESOURCE_TYPE="wggatewayserver"
+  GATEWAY_RESOURCE_NAME="rome"
+else
+  GATEWAY_TEMPLATE_NAME="wireguard-client"
+  GATEWAY_TEMPLATE_RESOURCE="WgGatewayClientTemplate"
+
+  GATEWAY_RESOURCE_NAMESPACE="liqo-tenant-milan"
+  GATEWAY_RESOURCE_TYPE="wggatewayclient"
+  GATEWAY_RESOURCE_NAME="milan"
+fi
+
+if ! kubectl --kubeconfig "$KUBECONFIG" patch $GATEWAY_TEMPLATE_RESOURCE $GATEWAY_TEMPLATE_NAME -n $NAMESPACE --type=json -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/deployment/spec/template/spec/containers/0/image\", \"value\": \"$GATEWAY_IMAGE_NAME\"}]"; then
+  echo "Failed to patch $GATEWAY_TEMPLATE_RESOURCE $GATEWAY_TEMPLATE_NAME"
+  exit 1
+fi
+
+if ! kubectl --kubeconfig "$KUBECONFIG" delete $GATEWAY_RESOURCE_TYPE $GATEWAY_RESOURCE_NAME -n $GATEWAY_RESOURCE_NAMESPACE; then
+  echo "Failed to delete $GATEWAY_RESOURCE_TYPE $GATEWAY_RESOURCE_NAME"
+  exit 1
+fi
 
 echo "✅ All deployments updated successfully."
