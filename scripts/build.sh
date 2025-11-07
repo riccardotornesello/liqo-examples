@@ -5,7 +5,6 @@ set -e
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 KUBECONFIG="$here/../testbench/liqo_kubeconf_milan"
-ROLE="provider"
 
 ####################################################
 # ARGUMENT PARSING
@@ -155,31 +154,31 @@ done
 
 if [[ $update_gateway -eq 1 ]]; then
   GATEWAY_IMAGE_NAME="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/gateway-ci:${DOCKER_TAG}"
-  if [ "$ROLE" == "provider" ]; then
-    GATEWAY_TEMPLATE_NAME="wireguard-server"
-    GATEWAY_TEMPLATE_RESOURCE="WgGatewayServerTemplate"
 
-    GATEWAY_RESOURCE_NAMESPACE="liqo-tenant-rome"
-    GATEWAY_RESOURCE_TYPE="wggatewayserver"
-    GATEWAY_RESOURCE_NAME="rome"
-  else
-    GATEWAY_TEMPLATE_NAME="wireguard-client"
-    GATEWAY_TEMPLATE_RESOURCE="WgGatewayClientTemplate"
+  # Patch both WgGatewayServerTemplate and WgGatewayClientTemplate
+  for template in "wireguard-server WgGatewayServerTemplate" "wireguard-client WgGatewayClientTemplate"; do
+    set -- $template
+    TEMPLATE_NAME=$1
+    TEMPLATE_RESOURCE=$2
+    if ! kubectl --kubeconfig "$KUBECONFIG" patch $TEMPLATE_RESOURCE $TEMPLATE_NAME -n $LIQO_NAMESPACE --type=json -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/deployment/spec/template/spec/containers/0/image\", \"value\": \"$GATEWAY_IMAGE_NAME\"}]"; then
+      echo "Failed to patch $TEMPLATE_RESOURCE $TEMPLATE_NAME"
+      exit 1
+    fi
+  done
 
-    GATEWAY_RESOURCE_NAMESPACE="liqo-tenant-milan"
-    GATEWAY_RESOURCE_TYPE="wggatewayclient"
-    GATEWAY_RESOURCE_NAME="milan"
-  fi
-
-  if ! kubectl --kubeconfig "$KUBECONFIG" patch $GATEWAY_TEMPLATE_RESOURCE $GATEWAY_TEMPLATE_NAME -n $LIQO_NAMESPACE --type=json -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/deployment/spec/template/spec/containers/0/image\", \"value\": \"$GATEWAY_IMAGE_NAME\"}]"; then
-    echo "Failed to patch $GATEWAY_TEMPLATE_RESOURCE $GATEWAY_TEMPLATE_NAME"
-    exit 1
-  fi
-
-  if ! kubectl --kubeconfig "$KUBECONFIG" delete $GATEWAY_RESOURCE_TYPE $GATEWAY_RESOURCE_NAME -n $GATEWAY_RESOURCE_NAMESPACE; then
-    echo "Failed to delete $GATEWAY_RESOURCE_TYPE $GATEWAY_RESOURCE_NAME"
-    exit 1
-  fi
+  # Delete all WgGatewayServer and WgGatewayClient resources in namespaces starting with liqo-tenant-
+  namespaces=$(kubectl --kubeconfig "$KUBECONFIG" get ns -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^liqo-tenant-')
+  for ns in $namespaces; do
+    for resource in wggatewayserver wggatewayclient; do
+      resources=$(kubectl --kubeconfig "$KUBECONFIG" get $resource -n $ns --no-headers --ignore-not-found | awk '{print $1}')
+      for r in $resources; do
+        if ! kubectl --kubeconfig "$KUBECONFIG" delete $resource $r -n $ns; then
+          echo "Failed to delete $resource $r in namespace $ns"
+          exit 1
+        fi
+      done
+    done
+  done
 fi
 
 echo "✅ All deployments updated successfully."
