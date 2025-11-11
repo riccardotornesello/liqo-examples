@@ -1,16 +1,18 @@
 #!/bin/bash
 
+# TODO: apply CRDs
+# TODO: allow local registry
+
 set -e
-
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-
-KUBECONFIG="$here/../testbench/liqo_kubeconf_milan"
 
 ####################################################
 # ARGUMENT PARSING
 ####################################################
 
+KUBECTL_KCFG=()
+
 COMPONENTS_ARG=""
+KUBECONFIG=""
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -20,8 +22,14 @@ while [[ $# -gt 0 ]]; do
     shift # past argument
     shift # past value
     ;;
+  --kubeconfig)
+    KUBECONFIG="$2"
+    shift # past argument
+    shift # past value
+    ;;
   *)
-    shift # unknown option
+    echo "Unknown option: $1"
+    exit 1
     ;;
   esac
 done
@@ -40,6 +48,11 @@ if [[ -n "$COMPONENTS_ARG" ]]; then
       fi
     done
   done
+fi
+
+# If the kubeconfig is specified, set the KUBECTL_KCFG variable
+if [[ -n "$KUBECONFIG" ]]; then
+  KUBECTL_KCFG=(--kubeconfig "$KUBECONFIG")
 fi
 
 ####################################################
@@ -69,13 +82,15 @@ export ARCHS="linux/amd64"
 export DOCKER_ORGANIZATION=$(uuidgen)
 export DOCKER_TAG="1h"
 
-cd ../../../
+(
+  cd ../../../
 
-# Build only the requested components
-for component in "${BUILD_COMPONENTS[@]}"; do
-  echo "Building component: $component"
-  ./build/liqo/build.sh "./cmd/$component/"
-done
+  # Build only the requested components
+  for component in "${BUILD_COMPONENTS[@]}"; do
+    echo "Building component: $component"
+    ./build/liqo/build.sh "./cmd/$component/"
+  done
+)
 
 ####################################################
 # DEPLOYMENTS
@@ -97,12 +112,12 @@ for deployment in "${!DEPLOYMENTS[@]}"; do
   fi
 
   # Extract the container name from the deployment
-  container_name=$(kubectl get deployment --kubeconfig "$KUBECONFIG" "$deployment" -n "$LIQO_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
+  container_name=$(kubectl "${KUBECTL_KCFG[@]}" get deployment "$deployment" -n "$LIQO_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
 
   image_name="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/${component}-ci:${DOCKER_TAG}"
 
   echo "Updating deployment: $deployment, container: $container_name, image: $image_name"
-  if ! kubectl --kubeconfig "$KUBECONFIG" set image "deployment/$deployment" "$container_name=$image_name" -n "$LIQO_NAMESPACE"; then
+  if ! kubectl "${KUBECTL_KCFG[@]}" set image "deployment/$deployment" "$container_name=$image_name" -n "$LIQO_NAMESPACE"; then
     echo "Failed to update image for deployment: $deployment"
     exit 1
   fi
@@ -128,12 +143,21 @@ for daemonset in "${!DAEMONSETS[@]}"; do
   fi
 
   # Extract the container name from the daemonset
-  container_name=$(kubectl get daemonset --kubeconfig "$KUBECONFIG" "$daemonset" -n "$LIQO_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
+  container_name=$(kubectl "${KUBECTL_KCFG[@]}" get daemonset "$daemonset" -n "$LIQO_NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].name}')
 
   image_name="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/${component}-ci:${DOCKER_TAG}"
 
+  # If the daemonset is liqo-fabric, change the command to /usr/bin/fabric
+  if [[ "$daemonset" == "liqo-fabric" ]]; then
+    if ! kubectl "${KUBECTL_KCFG[@]}" patch daemonset "$daemonset" -n "$LIQO_NAMESPACE" --type=json -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/command", "value": ["/usr/bin/fabric"]}]'; then
+      echo "Failed to patch command for daemonset: $daemonset"
+      exit 1
+    fi
+  fi
+
+  # Update the image
   echo "Updating daemonset: $daemonset, container: $container_name, image: $image_name"
-  if ! kubectl --kubeconfig "$KUBECONFIG" set image "daemonset/$daemonset" "$container_name=$image_name" -n "$LIQO_NAMESPACE"; then
+  if ! kubectl "${KUBECTL_KCFG[@]}" set image "daemonset/$daemonset" "$container_name=$image_name" -n "$LIQO_NAMESPACE"; then
     echo "Failed to update image for daemonset: $daemonset"
     exit 1
   fi
@@ -160,19 +184,19 @@ if [[ $update_gateway -eq 1 ]]; then
     set -- $template
     TEMPLATE_NAME=$1
     TEMPLATE_RESOURCE=$2
-    if ! kubectl --kubeconfig "$KUBECONFIG" patch $TEMPLATE_RESOURCE $TEMPLATE_NAME -n $LIQO_NAMESPACE --type=json -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/deployment/spec/template/spec/containers/0/image\", \"value\": \"$GATEWAY_IMAGE_NAME\"}]"; then
+    if ! kubectl "${KUBECTL_KCFG[@]}" patch $TEMPLATE_RESOURCE $TEMPLATE_NAME -n $LIQO_NAMESPACE --type=json -p="[{\"op\": \"replace\", \"path\": \"/spec/template/spec/deployment/spec/template/spec/containers/0/image\", \"value\": \"$GATEWAY_IMAGE_NAME\"}]"; then
       echo "Failed to patch $TEMPLATE_RESOURCE $TEMPLATE_NAME"
       exit 1
     fi
   done
 
   # Delete all WgGatewayServer and WgGatewayClient resources in namespaces starting with liqo-tenant-
-  namespaces=$(kubectl --kubeconfig "$KUBECONFIG" get ns -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^liqo-tenant-')
+  namespaces=$(kubectl "${KUBECTL_KCFG[@]}" get ns -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^liqo-tenant-')
   for ns in $namespaces; do
     for resource in wggatewayserver wggatewayclient; do
-      resources=$(kubectl --kubeconfig "$KUBECONFIG" get $resource -n $ns --no-headers --ignore-not-found | awk '{print $1}')
+      resources=$(kubectl "${KUBECTL_KCFG[@]}" get $resource -n $ns --no-headers --ignore-not-found | awk '{print $1}')
       for r in $resources; do
-        if ! kubectl --kubeconfig "$KUBECONFIG" delete $resource $r -n $ns; then
+        if ! kubectl "${KUBECTL_KCFG[@]}" delete $resource $r -n $ns; then
           echo "Failed to delete $resource $r in namespace $ns"
           exit 1
         fi
