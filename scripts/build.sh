@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# TODO: apply CRDs
 # TODO: allow local registry
 
 set -e
@@ -13,6 +12,7 @@ KUBECTL_KCFG=()
 
 COMPONENTS_ARG=""
 KUBECONFIG=""
+UPDATE_CRD=1
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -26,6 +26,10 @@ while [[ $# -gt 0 ]]; do
     KUBECONFIG="$2"
     shift # past argument
     shift # past value
+    ;;
+  --skip-crd)
+    UPDATE_CRD=0
+    shift # past argument
     ;;
   *)
     echo "Unknown option: $1"
@@ -204,5 +208,18 @@ if [[ $update_gateway -eq 1 ]]; then
     done
   done
 fi
+
+####################################################
+# CRD
+####################################################
+
+if [[ $UPDATE_CRD -eq 1 ]]; then
+  echo "Applying CRDs..."
+  if ! kubectl "${KUBECTL_KCFG[@]}" apply -f ../../../deployments/liqo/charts/liqo-crds/crds/; then
+    echo "Failed to apply CRDs"
+    exit 1
+  fi
+fi
+
 
 echo "✅ All deployments updated successfully."
