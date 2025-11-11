@@ -1,7 +1,9 @@
 import os
-from kubernetes import client, config
 
-from network import get_pod_ip, get_service_ip
+from utils.kubernetes.nodes import Node, get_nodes
+from utils.kubernetes.pods import Pod, get_pods
+from utils.kubernetes.services import Service, get_services
+from utils.kubernetes.remapped_cidrs import get_remapped_cidrs
 
 
 class Cluster:
@@ -10,106 +12,97 @@ class Cluster:
 
     Attributes:
         name (str): The name of the cluster.
-        kubeconfig (str): Path to the kubeconfig file for cluster access.
+        color (str): The color code associated with the cluster.
+        kubeconfig_location (str): Path to the kubeconfig file for cluster access.
         namespaces (list[str]): List of namespaces to monitor in the cluster.
-        offloaded_pods (list[str]): List of pod names that are offloaded to another cluster.
-        pods (dict): Dictionary mapping namespace to list of pod names.
-        pod_ips (dict): Dictionary mapping pod names to their IP addresses.
-        services (dict): Dictionary mapping namespace to list of service names.
-        service_ips (dict): Dictionary mapping service names to their cluster IPs.
+        nodes (list[Node]): List of nodes in the cluster.
+        pods (dict[str, list[Pod]]): Dictionary mapping namespace to list of pods.
+        services (dict[str, list[Service]]): Dictionary mapping namespace to list of services.
+        remapped_cidrs (dict[str, str]): Dictionary mapping tenant names to their external Pod CIDRs.
     """
+
+    name: str
+    color: str
+    kubeconfig_location: str
+
+    namespaces: list[str]
+
+    nodes: list[Node]
+    pods: dict[str, list[Pod]]
+    services: dict[str, list[Service]]
+    remapped_cidrs: dict[str, str]
 
     def __init__(
         self,
         name: str,
-        kubeconfig: str,
+        kubeconfig_location: str,
         namespaces: list[str],
-        offloaded_pods: list[str] = None,
+        color: str = "44",
     ):
         """
         Initializes a Cluster instance and retrieves initial pod and service information.
 
         Args:
             name (str): The name of the cluster.
-            kubeconfig (str): Path to the kubeconfig file.
+            kubeconfig_location (str): Path to the kubeconfig file.
             namespaces (list[str]): List of namespaces to monitor.
-            offloaded_pods (list[str], optional): List of offloaded pod names. Defaults to None.
+            color (str, optional): Color code for display purposes. Defaults to "44".
 
         Raises:
             FileNotFoundError: If the kubeconfig file does not exist.
         """
+        if not os.path.exists(kubeconfig_location):
+            raise FileNotFoundError(
+                f"Kubeconfig file '{kubeconfig_location}' not found."
+            )
+
         self.name = name
-        self.kubeconfig = kubeconfig
+        self.color = color
+        self.kubeconfig_location = kubeconfig_location
+
         self.namespaces = namespaces
-        self.offloaded_pods = offloaded_pods if offloaded_pods is not None else []
 
-        if not os.path.exists(kubeconfig):
-            raise FileNotFoundError(f"Kubeconfig file '{kubeconfig}' not found.")
+        self.nodes = get_nodes(self.kubeconfig_location)
 
-        self.refresh_pods()
-        self.refresh_services()
+        virtual_nodes = [
+            node.name
+            for node in self.nodes
+            if node.labels.get("liqo.io/type") == "virtual-node"
+        ]
+        self.pods = {
+            ns: get_pods(
+                self.kubeconfig_location, namespace=ns, excluded_nodes=virtual_nodes
+            )
+            for ns in self.namespaces
+        }
 
-    def refresh_pods(self) -> tuple[dict[str, list[str]], dict[str, str]]:
-        """
-        Refreshes the list of pods and their IP addresses from the cluster.
+        self.services = {
+            ns: get_services(self.kubeconfig_location, namespace=ns)
+            for ns in self.namespaces
+        }
 
-        Queries all configured namespaces and retrieves pod names and IPs.
-
-        Returns:
-            tuple[dict[str, list[str]], dict[str, str]]: A tuple containing:
-                - Dictionary mapping namespace to list of pod names
-                - Dictionary mapping pod names to their IP addresses
-        """
-        self.pods = {}
-        self.pod_ips = {}
-
-        for ns in self.namespaces:
-            pod_list = client.CoreV1Api(
-                api_client=config.new_client_from_config(self.kubeconfig)
-            ).list_namespaced_pod(ns)
-
-            self.pods[ns] = [pod.metadata.name for pod in pod_list.items]
-            for pod in self.pods[ns]:
-                self.pod_ips[pod] = get_pod_ip(self.kubeconfig, ns, pod)
-
-        return self.pods, self.pod_ips
-
-    def refresh_services(self) -> tuple[dict[str, list[str]], dict[str, str]]:
-        """
-        Refreshes the list of services and their cluster IPs from the cluster.
-
-        Queries all configured namespaces and retrieves service names and cluster IPs.
-
-        Returns:
-            tuple[dict[str, list[str]], dict[str, str]]: A tuple containing:
-                - Dictionary mapping namespace to list of service names
-                - Dictionary mapping service names to their cluster IPs
-        """
-        self.services = {}
-        self.service_ips = {}
-
-        for ns in self.namespaces:
-            svc_list = client.CoreV1Api(
-                api_client=config.new_client_from_config(self.kubeconfig)
-            ).list_namespaced_service(ns)
-
-            self.services[ns] = [svc.metadata.name for svc in svc_list.items]
-            for svc in self.services[ns]:
-                self.service_ips[svc] = get_service_ip(self.kubeconfig, ns, svc)
-
-        return self.services, self.service_ips
+        self.remapped_cidrs = get_remapped_cidrs(self.kubeconfig_location)
 
 
-clusters = {
-    "consumer": Cluster(
-        "rome",
-        "../testbench/liqo_kubeconf_rome",
-        ["consumer-local", "offloaded"],
-        ["po3", "po4"],
-    ),
-    "provider": Cluster(
-        "milan",
-        "../testbench/liqo_kubeconf_milan",
-        ["offloaded-rome", "provider-local"],
-    ),
-}
+def load_clusters_from_config(config_data: list) -> list[Cluster]:
+    """
+    Loads cluster configurations from the provided data and initializes Cluster instances.
+
+    Args:
+        config_data (dict): Configuration data containing cluster information.
+
+    Returns:
+        list[Cluster]: List of initialized Cluster instances.
+    """
+    clusters = []
+
+    for cluster_cfg in config_data:
+        cluster = Cluster(
+            name=cluster_cfg["name"],
+            kubeconfig_location=cluster_cfg["kubeconfig_location"],
+            namespaces=[ns_cfg["name"] for ns_cfg in cluster_cfg.get("namespaces", [])],
+            color=cluster_cfg.get("color"),
+        )
+        clusters.append(cluster)
+
+    return clusters

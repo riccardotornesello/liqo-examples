@@ -11,29 +11,29 @@ class BaseResource:
 
     Attributes:
         kubeconfig_path (str): Path to the kubeconfig file.
-        namespace (str): The namespace where the resource is located.
-        name (str): The name of the resource.
+        namespace (str | None): The namespace where the resource is located.
+        name (str | None): The name of the resource.
     """
 
     kubeconfig_path: str
-    namespace: str
-    name: str
+    namespace: str | None
+    name: str | None
 
     BODY_LOCATION: str | None
 
     def __init__(
         self,
         kubeconfig_path: str,
-        namespace: str,
-        name: str,
+        namespace: str | None = None,
+        name: str | None = None,
     ):
         """
         Initializes a BaseResource instance.
 
         Args:
             kubeconfig_path (str): Path to the kubeconfig file.
-            namespace (str): The namespace where the resource will be created.
-            name (str): The name of the resource.
+            namespace (str | None): The namespace where the resource will be created.
+            name (str | None): The name of the resource.
         """
         self.kubeconfig_path = kubeconfig_path
         self.namespace = namespace
@@ -201,6 +201,33 @@ class CustomResource(BaseResource):
             plural=self.CR_PLURAL,
             name=self.name,
         )
+
+    def list(self) -> list[dict]:
+        """
+        Lists all instances of the custom resource in the specified namespace.
+
+        Returns:
+            list[dict]: A list of custom resource objects.
+        """
+        api_instance = kubernetes.client.CustomObjectsApi(
+            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
+        )
+
+        if self.namespace:
+            response = api_instance.list_namespaced_custom_object(
+                group=self.CR_GROUP,
+                version=self.CR_VERSION,
+                namespace=self.namespace,
+                plural=self.CR_PLURAL,
+            )
+        else:
+            response = api_instance.list_cluster_custom_object(
+                group=self.CR_GROUP,
+                version=self.CR_VERSION,
+                plural=self.CR_PLURAL,
+            )
+
+        return response.get("items", [])
 
 
 class NetworkPolicyResource(BaseResource):

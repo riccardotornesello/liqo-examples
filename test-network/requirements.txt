@@ -1,3 +1,5 @@
 kubernetes
 tabulate
 tqdm
+PyYAML
+Cerberus

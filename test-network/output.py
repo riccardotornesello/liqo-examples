@@ -1,5 +1,5 @@
 from tabulate import tabulate
-from tests import Test, TestEntity
+from tests.execution import Test, TestEntity
 
 
 def format_header_color(destination: TestEntity) -> str:
@@ -18,7 +18,7 @@ def format_header_color(destination: TestEntity) -> str:
 
     if not color:
         return f" {name} "
-    
+
     else:
         return f"\x1b[{color}m {name} \x1b[0m"
 
@@ -121,6 +121,7 @@ def print_results(
     tests: list[Test],
     sources: list[TestEntity],
     destinations: list[TestEntity],
+    verbose: bool = False,
 ) -> None:
     """
     Prints test results in a formatted table to the console.
@@ -133,6 +134,7 @@ def print_results(
         tests (list[Test]): List of test objects containing test results.
         sources (list[TestEntity]): List of source entities (rows in the table).
         destinations (list[TestEntity]): List of destination entities (columns in the table).
+        verbose (bool, optional): If True, prints a detailed summary of each test. Defaults to False.
 
     Returns:
         None: Results are printed to stdout.
@@ -158,7 +160,8 @@ def print_results(
 
         results_dict[src_name][dst_cluster_name][dst_name][test_type] = test.result
 
-    print_test_summary(tests)
+    if verbose:
+        print_test_summary(tests)
 
     header = ["source pod"] + [format_header_color(dest) for dest in destinations]
     rows = get_formatted_results(results_dict, sources, destinations)
