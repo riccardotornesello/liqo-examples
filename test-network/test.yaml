@@ -23,3 +23,10 @@ tests:
         options:
           allow_to_offloaded_pods_from: rome
           allow_established: false
+      - type: isolation_network_policy
+        cluster: milan
+        name: isolate-offloaded-rome
+        namespace: offloaded-rome
+        options:
+          allowed_clusters:
+            - rome

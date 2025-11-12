@@ -89,7 +89,7 @@ class TunnelFirewallRuleResource(FirewallConfigurationResource):
         }
 
         # Body
-        body = {
+        return {
             "apiVersion": "networking.liqo.io/v1beta1",
             "kind": "FirewallConfiguration",
             "metadata": {
@@ -148,5 +148,3 @@ class TunnelFirewallRuleResource(FirewallConfigurationResource):
                 }
             },
         }
-
-        return body
