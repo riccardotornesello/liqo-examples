@@ -11,3 +11,15 @@ clusters:
     namespaces:
       - name: offloaded-rome
       - name: provider-local
+
+tests:
+  - name: Default
+  - name: Filter gateway output
+    resources:
+      - type: tunnel_firewall_rule
+        cluster: milan
+        name: gw-rome
+        namespace: liqo-tenant-rome
+        options:
+          allow_to_offloaded_pods_from: rome
+          allow_established: false

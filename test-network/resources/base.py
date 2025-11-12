@@ -13,11 +13,14 @@ class BaseResource:
         kubeconfig_path (str): Path to the kubeconfig file.
         namespace (str | None): The namespace where the resource is located.
         name (str | None): The name of the resource.
+        options: dict: Additional options for resource configuration.
+        BODY_LOCATION (str | None): Path to the YAML file defining the resource body.
     """
 
     kubeconfig_path: str
     namespace: str | None
     name: str | None
+    options: dict
 
     BODY_LOCATION: str | None
 
@@ -26,6 +29,7 @@ class BaseResource:
         kubeconfig_path: str,
         namespace: str | None = None,
         name: str | None = None,
+        options: dict = {},
     ):
         """
         Initializes a BaseResource instance.
@@ -38,6 +42,7 @@ class BaseResource:
         self.kubeconfig_path = kubeconfig_path
         self.namespace = namespace
         self.name = name
+        self.options = options
 
     def _get_body_content(self) -> dict:
         """
@@ -136,7 +141,16 @@ class CustomResource(BaseResource):
 
         Returns:
             dict: The created custom resource object.
+
+        Raises:
+            ValueError: If namespace or name is not set.
         """
+        if not self.namespace:
+            raise ValueError("Namespace must be set to create the resource.")
+
+        if not self.name:
+            raise ValueError("Name must be set to create the resource.")
+
         api_instance = kubernetes.client.CustomObjectsApi(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
@@ -165,7 +179,14 @@ class CustomResource(BaseResource):
         Raises:
             kubernetes.client.exceptions.ApiException: If deletion fails for reasons
                 other than the resource not being found (when exception_on_not_found is False).
+            ValueError: If namespace or name is not set.
         """
+        if not self.namespace:
+            raise ValueError("Namespace must be set to delete the resource.")
+
+        if not self.name:
+            raise ValueError("Name must be set to delete the resource.")
+
         api_instance = kubernetes.client.CustomObjectsApi(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
@@ -190,7 +211,16 @@ class CustomResource(BaseResource):
 
         Returns:
             dict: The custom resource object.
+
+        Raises:
+            ValueError: If namespace or name is not set.
         """
+        if not self.namespace:
+            raise ValueError("Namespace must be set to get the resource.")
+
+        if not self.name:
+            raise ValueError("Name must be set to get the resource.")
+
         api_instance = kubernetes.client.CustomObjectsApi(
             api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
         )
@@ -228,86 +258,3 @@ class CustomResource(BaseResource):
             )
 
         return response.get("items", [])
-
-
-class NetworkPolicyResource(BaseResource):
-    """
-    Represents a Kubernetes NetworkPolicy resource.
-
-    Provides methods to create and delete NetworkPolicy resources.
-    """
-
-    def create(self):
-        """
-        Creates the NetworkPolicy in the Kubernetes cluster.
-
-        Returns:
-            V1NetworkPolicy: The created NetworkPolicy object.
-        """
-        api_instance = kubernetes.client.NetworkingV1Api(
-            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
-        )
-        body = self._get_body()
-
-        return api_instance.create_namespaced_network_policy(
-            namespace=self.namespace, body=body
-        )
-
-    def delete(self, exception_on_not_found: bool = False):
-        """
-        Deletes the NetworkPolicy from the Kubernetes cluster.
-
-        Args:
-            exception_on_not_found (bool, optional): Whether to raise an exception if
-                the resource is not found. Defaults to False.
-
-        Returns:
-            V1Status | None: The deletion status object, or None if not found and
-                exception_on_not_found is False.
-
-        Raises:
-            kubernetes.client.exceptions.ApiException: If deletion fails for reasons
-                other than the resource not being found (when exception_on_not_found is False).
-        """
-        name = self.name
-        namespace = self.namespace
-
-        api_instance = kubernetes.client.NetworkingV1Api(
-            api_client=kubernetes.config.new_client_from_config(self.kubeconfig_path)
-        )
-
-        try:
-            return api_instance.delete_namespaced_network_policy(
-                name=name,
-                namespace=namespace,
-            )
-        except kubernetes.client.exceptions.ApiException as e:
-            if e.status == 404 and not exception_on_not_found:
-                return None
-            else:
-                raise e
-
-
-class FirewallConfigurationResource(CustomResource):
-    """
-    Represents a Liqo FirewallConfiguration custom resource.
-
-    Manages firewall configuration resources in the networking.liqo.io API group.
-    """
-
-    CR_GROUP = "networking.liqo.io"
-    CR_VERSION = "v1beta1"
-    CR_PLURAL = "firewallconfigurations"
-
-
-class NetworkResource(CustomResource):
-    """
-    Represents a Liqo Network custom resource.
-
-    Manages network resources in the ipam.liqo.io API group, typically used
-    for retrieving remapped CIDR information.
-    """
-
-    CR_GROUP = "ipam.liqo.io"
-    CR_VERSION = "v1alpha1"
-    CR_PLURAL = "networks"

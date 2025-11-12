@@ -1,4 +1,4 @@
-from resources import NetworkResource
+from resources.liqo import NetworkResource
 
 
 def get_remapped_cidrs(kubeconfig_path: str) -> dict[str, str]:

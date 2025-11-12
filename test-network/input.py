@@ -21,17 +21,43 @@ cluster_schema = {
     },
 }
 
+resource_schema = {
+    "type": {"type": "string", "required": True},
+    "cluster": {"type": "string", "required": True},
+    "name": {"type": "string", "required": True},
+    "namespace": {"type": "string", "required": True},
+    "options": {"type": "dict", "required": False},
+}
+
+test_schema = {
+    "name": {"type": "string", "required": True},
+    "resources": {
+        "type": "list",
+        "required": False,
+        "schema": {
+            "type": "dict",
+            "schema": resource_schema,
+        },
+    },
+}
+
 root_schema = {
     "clusters": {
         "type": "list",
         "required": True,
-        "minlength": 2,
-        "maxlength": 2,
         "schema": {
             "type": "dict",
             "schema": cluster_schema,
         },
-    }
+    },
+    "tests": {
+        "type": "list",
+        "required": False,
+        "schema": {
+            "type": "dict",
+            "schema": test_schema,
+        },
+    },
 }
 
 

@@ -1,7 +1,7 @@
 import os
 
 from utils.kubernetes.nodes import Node, get_nodes
-from utils.kubernetes.pods import Pod, get_pods
+from utils.kubernetes.pods import Pod, get_pods, get_local_offloaded_pods
 from utils.kubernetes.services import Service, get_services
 from utils.kubernetes.remapped_cidrs import get_remapped_cidrs
 
@@ -16,9 +16,10 @@ class Cluster:
         kubeconfig_location (str): Path to the kubeconfig file for cluster access.
         namespaces (list[str]): List of namespaces to monitor in the cluster.
         nodes (list[Node]): List of nodes in the cluster.
-        pods (dict[str, list[Pod]]): Dictionary mapping namespace to list of pods.
+        pods (dict[str, list[Pod]]): Dictionary mapping namespace to list of pods. Only includes non-virtual-node pods.
         services (dict[str, list[Service]]): Dictionary mapping namespace to list of services.
         remapped_cidrs (dict[str, str]): Dictionary mapping tenant names to their external Pod CIDRs.
+        local_offloaded_pods (dict[str, list[Pod]]): Dictionary mapping origin cluster names to their offloaded pods.
     """
 
     name: str
@@ -31,6 +32,7 @@ class Cluster:
     pods: dict[str, list[Pod]]
     services: dict[str, list[Service]]
     remapped_cidrs: dict[str, str]
+    local_offloaded_pods: dict[str, list[Pod]]
 
     def __init__(
         self,
@@ -80,6 +82,8 @@ class Cluster:
             ns: get_services(self.kubeconfig_location, namespace=ns)
             for ns in self.namespaces
         }
+
+        self.local_offloaded_pods = get_local_offloaded_pods(self.kubeconfig_location)
 
         self.remapped_cidrs = get_remapped_cidrs(self.kubeconfig_location)
 

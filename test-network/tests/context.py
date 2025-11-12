@@ -1,6 +1,6 @@
 from time import sleep
 
-from resources import BaseResource
+from resources.base import BaseResource
 
 
 class TestManager:
