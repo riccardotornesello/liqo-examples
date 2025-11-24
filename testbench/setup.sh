@@ -4,8 +4,7 @@ set -e
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 # shellcheck source=/dev/null
-source "$here/../../common.sh"
-source "$here/utils.sh"
+source "$here/common.sh"
 
 CLUSTER_NAME_CONSUMER=rome
 CLUSTER_NAME_PROVIDER=milan
@@ -20,14 +19,11 @@ MANIFEST_CONSUMER="$here/manifests/resources_consumer.yaml"
 MANIFEST_PROVIDER="$here/manifests/resources_provider.yaml"
 MANIFEST_OFFLOADED="$here/manifests/resources_offloaded.yaml"
 
-MANIFEST_CALICO_1=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/operator-crds.yaml
-MANIFEST_CALICO_2=https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
-MANIFEST_CALICO_3="$here/manifests/calico.yaml"
+CALICO_VALUES_FILE="$here/manifests/calico.yaml"
 
 CILIUM_VALUES_FILE="$here/manifests/cilium_values.yaml"
 
 K8S_ENVIRONMENTS=("k3d" "kind")
-CNI_PLUGINS=("flannel" "calico" "cilium" "kindnet")
 
 declare -A ENVIRONMENT_COMPATIBILITY
 ENVIRONMENT_COMPATIBILITY[k3d]="flannel calico cilium"
@@ -46,8 +42,42 @@ LIQO_COMMIT_ID=""
 
 CONFIG_FILE="$here/.liqo_config"
 
+function connect_registry_proxy() {
+	local network_name="$1"
+
+	info "Connecting registry proxy..."
+
+	# Skip if already connected
+	if docker network inspect "$network_name" | grep -q liqo_registry_proxy; then
+		success_clear_line "Registry proxy already connected to docker network \"$network_name\"."
+		return
+	fi
+
+	fail_on_error "docker network connect $network_name liqo_registry_proxy" "Failed to connect registry proxy to docker network \"$network_name\""
+
+	success_clear_line "Registry proxy connected to docker network \"$network_name\"."
+}
+
+function register_image_cache_kind() {
+	local cluster_name="$1"
+
+	local registry_ip=$(get_container_ip "liqo_registry_proxy" "kind")
+	local setup_url="http://$registry_ip:3128/setup/systemd"
+
+	info "Registering image cache for cluster \"$cluster_name\"..."
+
+	curl -s "$setup_url" | sed "s/docker\.service/containerd\.service/g" | sed "/Environment/ s/$/ \"NO_PROXY=127.0.0.0\/8,10.0.0.0\/8,172.16.0.0\/12,192.168.0.0\/16\"/" >/tmp/setup_cache.sh
+
+	for NODE in $(kind get nodes --name "$cluster_name"); do
+		fail_on_error "docker cp /tmp/setup_cache.sh $NODE:/setup_cache.sh" "Failed to copy setup script to node \"$NODE\" in cluster \"$cluster_name\""
+		fail_on_error "docker exec $NODE bash /setup_cache.sh" "Failed to register image cache for node \"$NODE\" in cluster \"$cluster_name\""
+	done
+
+	success_clear_line "Image cache registered for cluster \"$cluster_name\"."
+}
+
 function select_environment() {
-	question "Select the Kubernetes environment"
+	info "Select the Kubernetes environment"
 
 	local options=("${K8S_ENVIRONMENTS[@]}" "Exit")
 	PS3="Select the environment: "
@@ -67,7 +97,7 @@ function select_environment() {
 }
 
 function select_cni() {
-	question "Select the CNI to install"
+	info "Select the CNI to install"
 
 	# Filter CNI options based on selected environment
 	local compatible_cnis=(${ENVIRONMENT_COMPATIBILITY[$K8S_ENVIRONMENT]})
@@ -90,7 +120,7 @@ function select_cni() {
 }
 
 function select_cache_option() {
-	question "Do you want to enable the image cache? (recommended)"
+	info "Do you want to enable the image cache? (recommended)"
 
 	read -p "Enable image cache? [Y/n] " -r
 	REPLY=${REPLY,,}
@@ -105,7 +135,7 @@ function select_cache_option() {
 }
 
 function select_resources_option() {
-	question "Do you want to create demo resources in the clusters?"
+	info "Do you want to create demo resources in the clusters?"
 
 	read -p "Create demo resources? [Y/n] " -r
 	REPLY=${REPLY,,}
@@ -172,7 +202,7 @@ function save_liqo_version() {
 	local repo="$1"
 	local commit="$2"
 
-	question "Do you want to save this Liqo version configuration for future use?"
+	info "Do you want to save this Liqo version configuration for future use?"
 
 	read -p "Save configuration? [y/N] " -r
 	REPLY=${REPLY,,}
@@ -187,7 +217,7 @@ function save_liqo_version() {
 }
 
 function select_liqo_version() {
-	question "Select Liqo version"
+	info "Select Liqo version"
 
 	# Load saved versions
 	load_saved_versions
@@ -306,13 +336,8 @@ function setup_k3d() {
 
 	# 4. Install the CNI (if needed)
 	if [ "$CNI_PLUGIN" == "calico" ]; then
-		create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_1"
-		create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_2"
-		create_resources "$KUBECONFIG_CONSUMER" "$MANIFEST_CALICO_3"
-
-		create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_1"
-		create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_2"
-		create_resources "$KUBECONFIG_PROVIDER" "$MANIFEST_CALICO_3"
+		install_calico "$KUBECONFIG_CONSUMER" "$CALICO_VALUES_FILE"
+		install_calico "$KUBECONFIG_PROVIDER" "$CALICO_VALUES_FILE"
 	fi
 
 	if [ "$CNI_PLUGIN" == "cilium" ]; then
