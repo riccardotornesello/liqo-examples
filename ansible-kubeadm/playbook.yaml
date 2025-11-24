@@ -63,11 +63,11 @@
       ansible.builtin.command: swapoff -a
       when: ansible_swaptotal_mb > 0
 
-    - name: Comment the swap line in /etc/fstab
-      ansible.builtin.replace:
-        path: /etc/fstab
-        regexp: "^(.*swap.*)$"
-        replace: '# \1'
+    - name: Remove swap from /etc/fstab
+      ansible.posix.mount:
+        name: swap
+        fstype: swap
+        state: absent
 
     - name: Install containerd
       ansible.builtin.apt:
