@@ -305,6 +305,7 @@ function setup_k3d() {
 
 	# 2. Create the clusters
 	local options=("")
+	local liqo_options=("")
 
 	if [ "$CNI_PLUGIN" != "flannel" ]; then
 		options+=("--k3s-arg" "--flannel-backend=none@server:*")
@@ -324,8 +325,8 @@ function setup_k3d() {
 		options+=("--volume" "$REGISTRY_DIR/docker_mirror_certs/ca.crt:/etc/ssl/certs/registry-proxy-ca.pem")
 	fi
 
-	create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml" "$options"
-	create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml" "$options"
+	create_k3d_cluster "$CLUSTER_NAME_CONSUMER" "$here/manifests/k3d_consumer.yaml" "${options[@]}"
+	create_k3d_cluster "$CLUSTER_NAME_PROVIDER" "$here/manifests/k3d_provider.yaml" "${options[@]}"
 
 	# 3. Save the kubeconfig files
 	K3D_KUBECONFIG_CONSUMER_LOCATION=$(get_k3d_kubeconfig $CLUSTER_NAME_CONSUMER)
@@ -338,6 +339,9 @@ function setup_k3d() {
 	if [ "$CNI_PLUGIN" == "calico" ]; then
 		install_calico "$KUBECONFIG_CONSUMER" "$CALICO_VALUES_FILE"
 		install_calico "$KUBECONFIG_PROVIDER" "$CALICO_VALUES_FILE"
+
+		liqo_options+=("--set" "networking.fabric.config.fullMasquerade=true")
+		liqo_options+=("--set" "networking.fabric.config.gatewayMasqueradeBypass=true")
 	fi
 
 	if [ "$CNI_PLUGIN" == "cilium" ]; then
@@ -346,8 +350,8 @@ function setup_k3d() {
 	fi
 
 	# 5. Install Liqo
-	install_liqo_k3d "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "$LIQO_REPO_URL" "$LIQO_COMMIT_ID" ""
-	install_liqo_k3d "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "$LIQO_REPO_URL" "$LIQO_COMMIT_ID" ""
+	install_liqo_k3d "$CLUSTER_NAME_CONSUMER" "$KUBECONFIG_CONSUMER" "$POD_CIDR" "$SERVICES_CIDR" "$LIQO_REPO_URL" "$LIQO_COMMIT_ID" "" "${liqo_options[@]}"
+	install_liqo_k3d "$CLUSTER_NAME_PROVIDER" "$KUBECONFIG_PROVIDER" "$POD_CIDR" "$SERVICES_CIDR" "$LIQO_REPO_URL" "$LIQO_COMMIT_ID" "" "${liqo_options[@]}"
 }
 
 function setup_kind() {
