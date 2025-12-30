@@ -76,6 +76,8 @@ DEPLOYMENTS["liqo-controller-manager"]="liqo-controller-manager"
 declare -A DAEMONSETS
 DAEMONSETS["liqo-fabric"]="fabric"
 
+tenant_namespaces=$(kubectl "${KUBECTL_KCFG[@]}" get ns -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^liqo-tenant-')
+
 ####################################################
 # BUILD
 ####################################################
@@ -195,8 +197,7 @@ if [[ $update_gateway -eq 1 ]]; then
   done
 
   # Delete all WgGatewayServer and WgGatewayClient resources in namespaces starting with liqo-tenant-
-  namespaces=$(kubectl "${KUBECTL_KCFG[@]}" get ns -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^liqo-tenant-')
-  for ns in $namespaces; do
+  for ns in $tenant_namespaces; do
     for resource in wggatewayserver wggatewayclient; do
       resources=$(kubectl "${KUBECTL_KCFG[@]}" get $resource -n $ns --no-headers --ignore-not-found | awk '{print $1}')
       for r in $resources; do
@@ -206,6 +207,38 @@ if [[ $update_gateway -eq 1 ]]; then
         fi
       done
     done
+  done
+fi
+
+####################################################
+# VIRTUAL KUBELET
+####################################################
+
+# TODO: fix error if a virtual kubelet is not present
+# Check if vk needs to be updated
+update_vk=0
+for c in "${BUILD_COMPONENTS[@]}"; do
+  if [[ "$c" == "virtual-kubelet" ]]; then
+    update_vk=1
+    break
+  fi
+done
+
+if [[ $update_vk -eq 1 ]]; then
+  for ns in $tenant_namespaces; do
+    # From the tenant_namespace (e.g., liqo-tenant-abc), get the vk deployment name (e.g., vk-abc)
+    deployment="vk-${ns#liqo-tenant-}"
+
+    # Extract the container name from the deployment
+    container_name=$(kubectl "${KUBECTL_KCFG[@]}" get deployment "$deployment" -n "$ns" -o jsonpath='{.spec.template.spec.containers[0].name}')
+
+    image_name="${DOCKER_REGISTRY}/${DOCKER_ORGANIZATION}/virtual-kubelet-ci:${DOCKER_TAG}"
+
+    echo "Updating deployment: $deployment, container: $container_name, image: $image_name"
+    if ! kubectl "${KUBECTL_KCFG[@]}" set image "deployment/$deployment" "$container_name=$image_name" -n "$ns"; then
+      echo "Failed to update image for deployment: $deployment"
+      exit 1
+    fi
   done
 fi
 
@@ -220,6 +253,5 @@ if [[ $UPDATE_CRD -eq 1 ]]; then
     exit 1
   fi
 fi
-
 
 echo "✅ All deployments updated successfully."
