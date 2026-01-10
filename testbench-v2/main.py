@@ -3,11 +3,13 @@ import os
 import time
 
 # Add the current directory to the path to import local logging module
+# This is necessary to avoid conflicts with Python's standard logging module
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import from local logging module, not the standard library
+# Import from local logging module (not the standard library)
 import logging as local_logging
 
+# Use alias to get StepLogger from our local module
 StepLogger = local_logging.StepLogger
 
 

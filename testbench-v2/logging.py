@@ -138,6 +138,8 @@ class StepLogger:
             yield step
             self.complete_step(step)
         except Exception:
+            # Intentionally catch all exceptions to mark step as failed
+            # before re-raising to preserve the original error context
             self.fail_step(step)
             raise
     
@@ -159,6 +161,8 @@ class StepLogger:
             yield substep
             self.complete_step(substep)
         except Exception:
+            # Intentionally catch all exceptions to mark step as failed
+            # before re-raising to preserve the original error context
             self.fail_step(substep)
             raise
 
