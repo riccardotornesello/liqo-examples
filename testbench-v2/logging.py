@@ -137,7 +137,7 @@ class StepLogger:
         try:
             yield step
             self.complete_step(step)
-        except Exception as e:
+        except Exception:
             self.fail_step(step)
             raise
     
@@ -158,7 +158,7 @@ class StepLogger:
         try:
             yield substep
             self.complete_step(substep)
-        except Exception as e:
+        except Exception:
             self.fail_step(substep)
             raise
 

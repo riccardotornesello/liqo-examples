@@ -1,5 +1,14 @@
-from logging import StepLogger
+import sys
+import os
 import time
+
+# Add the current directory to the path to import local logging module
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import from local logging module, not the standard library
+import logging as local_logging
+
+StepLogger = local_logging.StepLogger
 
 
 def demo_completed_steps():
