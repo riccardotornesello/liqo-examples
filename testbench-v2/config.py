@@ -1,7 +1,18 @@
 import yaml
 import os
+from enum import Enum
 from typing import List, Optional, Any
 from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
+
+
+class RuntimeEnum(str, Enum):
+    k3d = "k3d"
+
+
+class CNIEnum(str, Enum):
+    calico = "calico"
+    flannel = "flannel"
+    cilium = "cilium"
 
 
 class CommonConfig(BaseModel):
@@ -10,11 +21,10 @@ class CommonConfig(BaseModel):
     and individual 'clusters'.
     """
 
-    runtime: str = "k3d"  # TODO: enum
-    cni: str = "flannel"  # TODO: enum
+    runtime: RuntimeEnum = RuntimeEnum.k3d
+    cni: CNIEnum = CNIEnum.calico
     workers: int = 1
-    cache: bool = False
-    liqo: bool = False
+    liqo: bool = False  # TODO: version customization
 
     resources: List[str] = Field(default_factory=list)
 
@@ -69,7 +79,6 @@ class RootConfig(BaseModel):
                 "runtime",
                 "workers",
                 "cni",
-                "cache",
                 "liqo",
                 "resources",
             ]
@@ -124,24 +133,7 @@ def format_pydantic_error(err):
     return f"{loc_path}: {err['msg']}"
 
 
-def validate_config(file_path: str):
-    """Loads and validates a YAML configuration file."""
-
-    if not os.path.exists(file_path):
-        print(f"❌ File not found: {file_path}")
-        return
-
-    with open(file_path, "r") as f:
-        try:
-            raw_data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            print(f"❌ YAML Syntax Error: {e}")
-            return
-
-    return validate_yaml(raw_data)
-
-
-def validate_yaml(raw_data: Any):
+def validate_data(raw_data: Any):
     """Main function to run the validation."""
 
     if raw_data is None:
@@ -157,6 +149,23 @@ def validate_yaml(raw_data: Any):
         print("❌ Validation Failed. Errors found:")
         for err in e.errors():
             print(f" - {format_pydantic_error(err)}")
+
+
+def validate_config_file(file_path: str):
+    """Loads and validates a YAML configuration file."""
+
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
+        return
+
+    with open(file_path, "r") as f:
+        try:
+            raw_data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            print(f"❌ YAML Syntax Error: {e}")
+            return
+
+    return validate_data(raw_data)
 
 
 if __name__ == "__main__":
@@ -187,4 +196,4 @@ clusters:
 """
 
     raw_data = yaml.safe_load(test_yaml)
-    validate_yaml(raw_data)
+    validate_data(raw_data)
