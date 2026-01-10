@@ -1,5 +1,6 @@
 import yaml
 import subprocess
+from config import CNIEnum
 
 
 def create_k3d_config(
@@ -47,6 +48,7 @@ def create_k3d_cluster(
     nodes: int,
     cluster_cidr: str,
     service_cidr: str,
+    cni: CNIEnum,
 ):
     config = create_k3d_config(
         nodes=nodes,
@@ -55,8 +57,28 @@ def create_k3d_cluster(
     )
     config_yaml = yaml.dump(config)
 
+    additional_args = []
+
+    if cni != CNIEnum.flannel:
+        additional_args.extend(
+            [
+                "--k3s-arg",
+                "--flannel-backend=none@server:*",
+                "--k3s-arg",
+                "--disable-network-policy@server:*",
+            ]
+        )
+
     subprocess.run(
-        ["k3d", "cluster", "create", "--config", "-", "--kubeconfig-update-default=false"],
+        [
+            "k3d",
+            "cluster",
+            "create",
+            "--config",
+            "-",
+            "--kubeconfig-update-default=false",
+        ]
+        + additional_args,
         input=config_yaml.encode(),
         check=True,
     )
