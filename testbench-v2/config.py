@@ -2,7 +2,7 @@ import yaml
 import os
 from enum import Enum
 from typing import List, Optional, Any
-from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
+from pydantic import BaseModel, Field, model_validator, ValidationError
 
 
 class RuntimeEnum(str, Enum):
@@ -12,7 +12,6 @@ class RuntimeEnum(str, Enum):
 class CNIEnum(str, Enum):
     calico = "calico"
     flannel = "flannel"
-    cilium = "cilium"
 
 
 class CommonConfig(BaseModel):
@@ -23,19 +22,7 @@ class CommonConfig(BaseModel):
 
     runtime: RuntimeEnum = RuntimeEnum.k3d
     cni: CNIEnum = CNIEnum.calico
-    workers: int = 1
-    liqo: bool = False  # TODO: version customization
-
-    resources: List[str] = Field(default_factory=list)
-
-    @field_validator("resources")
-    @classmethod
-    def check_resources_exist(cls, v):
-        """Validates that every path in the resources list exists on disk."""
-        for path in v:
-            if not os.path.exists(path):
-                raise ValueError(f"Path does not exist: '{path}'")
-        return v
+    nodes: int = 1
 
 
 class ClusterConfig(CommonConfig):
@@ -44,7 +31,6 @@ class ClusterConfig(CommonConfig):
     """
 
     name: str
-    peer: List[str] = Field(default_factory=list)
 
 
 class RootConfig(BaseModel):
@@ -77,10 +63,8 @@ class RootConfig(BaseModel):
             # List of fields that can be inherited
             inheritable_fields = [
                 "runtime",
-                "workers",
+                "nodes",
                 "cni",
-                "liqo",
-                "resources",
             ]
 
             for field in inheritable_fields:
@@ -94,29 +78,17 @@ class RootConfig(BaseModel):
     def validate_global_logic(self):
         """
         POST-VALIDATION HOOK.
-        Validates cross-cluster logic (Uniqueness, Peers).
+        Validates cross-cluster logic (uniqueness).
         """
         cluster_names = set()
 
-        # 1. Check Uniqueness
+        # Check name uniqueness
         for i, cluster in enumerate(self.clusters):
             if cluster.name in cluster_names:
                 raise ValueError(
                     f"Duplicate cluster name found: '{cluster.name}' (at clusters.{i})."
                 )
             cluster_names.add(cluster.name)
-
-        # 2. Check Peers
-        for i, cluster in enumerate(self.clusters):
-            for p_idx, peer_name in enumerate(cluster.peer):
-                if peer_name == cluster.name:
-                    raise ValueError(
-                        f"Cluster '{cluster.name}' (clusters.{i}) cannot be its own peer."
-                    )
-                if peer_name not in cluster_names:
-                    raise ValueError(
-                        f"Cluster '{cluster.name}' (clusters.{i}) refers to unknown peer '{peer_name}'."
-                    )
 
         return self
 
@@ -133,37 +105,40 @@ def format_pydantic_error(err):
     return f"{loc_path}: {err['msg']}"
 
 
-def validate_data(raw_data: Any):
+def validate_data(raw_data: Any) -> Optional[RootConfig]:
     """Main function to run the validation."""
 
     if raw_data is None:
         print("❌ File is empty.")
-        return
+        return None
 
     try:
         # Trigger Validation
-        RootConfig(**raw_data)
+        cfg = RootConfig(**raw_data)
         print("✅ Validation Successful!")
 
     except ValidationError as e:
         print("❌ Validation Failed. Errors found:")
         for err in e.errors():
             print(f" - {format_pydantic_error(err)}")
+        return None
+
+    return cfg
 
 
-def validate_config_file(file_path: str):
+def validate_config_file(file_path: str) -> Optional[RootConfig]:
     """Loads and validates a YAML configuration file."""
 
     if not os.path.exists(file_path):
         print(f"❌ File not found: {file_path}")
-        return
+        return None
 
     with open(file_path, "r") as f:
         try:
             raw_data = yaml.safe_load(f)
         except yaml.YAMLError as e:
             print(f"❌ YAML Syntax Error: {e}")
-            return
+            return None
 
     return validate_data(raw_data)
 
@@ -173,22 +148,18 @@ if __name__ == "__main__":
     # Generating a test file that exercises the inheritance and errors
     test_yaml = """
 default:
-  workers: 2            # Will be inherited by cluster-A
-  resources: ["."]      # Will be inherited by cluster-A (exists)
+  nodes: 2            # Will be inherited by cluster-A
 
 clusters:
   - name: "cluster-A"
     runtime: "docker"
     cni: "calico"
-    # workers inherited (2)
-    # resources inherited (.)
+    # nodes inherited (2)
 
   - name: "cluster-B"
     # runtime MISSING (error)
     cni: "flannel"
-    workers: "not-a-number" # Type Error
-    resources: ["/does/not/exist"] # Path Error
-    peer: ["cluster-A", "cluster-X"] # Peer Error (cluster-X unknown)
+    nodes: "not-a-number" # Type Error
 
   - name: "cluster-A" # Duplicate Name Error
     runtime: "containerd"

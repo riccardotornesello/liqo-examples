@@ -1,0 +1,5 @@
+clusters:
+  - name: "rome"
+    runtime: "k3d"
+    cni: "calico"
+    nodes: 2
