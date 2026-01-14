@@ -386,6 +386,7 @@ dependencies = [
     { name = "kubernetes" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "requests" },
 ]
 
 [package.dev-dependencies]
@@ -398,6 +399,7 @@ requires-dist = [
     { name = "kubernetes", specifier = ">=34.1.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "requests", specifier = ">=2.32.5" },
 ]
 
 [package.metadata.requires-dev]

@@ -1,4 +1,6 @@
-from kubernetes import utils, config
+import tempfile
+import requests
+from kubernetes import utils, config, client
 
 from cni.base import CNI
 
@@ -13,17 +15,29 @@ class Calico(CNI):
     def install(self) -> None:
         k8s_client = config.new_client_from_config(config_file=self.kubeconfig)
 
-        utils.create_from_yaml(
-            k8s_client,
+        # Save manifests to temp files and apply them
+        for url in [
             f"https://raw.githubusercontent.com/projectcalico/calico/v{self.version}/manifests/operator-crds.yaml",
-        )
-        utils.create_from_yaml(
-            k8s_client,
             f"https://raw.githubusercontent.com/projectcalico/calico/v{self.version}/manifests/tigera-operator.yaml",
-        )
+        ]:
+            with tempfile.NamedTemporaryFile() as temp_crds:
+                response = requests.get(url)
+                response.raise_for_status()
 
+                temp_crds.write(response.content)
+                temp_crds.flush()
+
+                utils.create_from_yaml(k8s_client, temp_crds.name)
+
+        # Apply Calico installation configuration
+        custom_objects_api = client.CustomObjectsApi(k8s_client)
         for resource in self._gen_config():
-            utils.create_from_dict(k8s_client, resource)
+            custom_objects_api.create_cluster_custom_object(
+                group=resource["apiVersion"].split("/")[0],
+                version=resource["apiVersion"].split("/")[1],
+                plural=resource["kind"].lower() + "s",
+                body=resource,
+            )
 
     def _gen_config(self) -> list[dict]:
         return [

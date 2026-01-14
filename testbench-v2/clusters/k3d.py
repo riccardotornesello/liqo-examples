@@ -33,6 +33,7 @@ class K3d(Cluster):
                 "k3d",
                 "cluster",
                 "create",
+                self.name,
                 "--config",
                 "-",
                 "--kubeconfig-update-default=false",
@@ -64,10 +65,7 @@ class K3d(Cluster):
                 raise ValueError(f"Unsupported CNI: {self.cni}")
 
         if cni is not None:
-            cni.install(
-                kubeconfig=kubeconfig_location,
-                cidr=self.cluster_cidr,
-            )
+            cni.install()
 
     def _get_kubeconfig_content(self) -> str:
         result = subprocess.run(
