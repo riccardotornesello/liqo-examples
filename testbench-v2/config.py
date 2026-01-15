@@ -14,23 +14,24 @@ class CNIEnum(str, Enum):
     flannel = "flannel"
 
 
-class CommonConfig(BaseModel):
-    """
-    Base model defining fields shared between the 'default' section
-    and individual 'clusters'.
-    """
+class ToolsConfig(BaseModel):
+    liqo: Optional[str] = None
 
+
+class CommonConfig(BaseModel):
     runtime: RuntimeEnum = RuntimeEnum.k3d
     cni: CNIEnum = CNIEnum.calico
     nodes: int = 1
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
-class ClusterConfig(CommonConfig):
-    """
-    Extends CommonConfig with cluster-specific fields.
-    """
-
+class ClusterConfig(BaseModel):
     name: str
+
+    runtime: Optional[RuntimeEnum] = None
+    cni: Optional[CNIEnum] = None
+    nodes: Optional[int] = None
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 class RootConfig(BaseModel):
@@ -60,7 +61,7 @@ class RootConfig(BaseModel):
             if not isinstance(cluster, dict):
                 continue
 
-            # List of fields that can be inherited
+            # If missing in cluster AND present in default -> Copy from default
             inheritable_fields = [
                 "runtime",
                 "nodes",
@@ -68,9 +69,16 @@ class RootConfig(BaseModel):
             ]
 
             for field in inheritable_fields:
-                # Logic: If missing in cluster AND present in default -> Copy from default
                 if field not in cluster and field in defaults:
                     cluster[field] = defaults[field]
+
+            # Merge tools sub-fields
+            if "tools" not in cluster and "tools" in defaults:
+                cluster["tools"] = defaults["tools"]
+            elif "tools" in cluster and "tools" in defaults:
+                for tool_field, tool_value in defaults["tools"].items():
+                    if tool_field not in cluster["tools"]:
+                        cluster["tools"][tool_field] = tool_value
 
         return data
 

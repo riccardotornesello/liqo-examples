@@ -1,3 +1,7 @@
+default:
+  tools:
+    liqo: "latest"
+
 clusters:
   - name: "rome"
     runtime: "k3d"

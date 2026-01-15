@@ -6,7 +6,7 @@ from clusters.k3d import K3d
 
 
 def parse(cluster_configs: List[ClusterConfig]) -> List[Cluster]:
-    clusters: List[Cluster] = []
+    cls: List[Cluster] = []
 
     for cfg in cluster_configs:
         cluster: Cluster
@@ -19,13 +19,14 @@ def parse(cluster_configs: List[ClusterConfig]) -> List[Cluster]:
                     cluster_cidr="10.200.0.0/16",  # TODO make configurable
                     service_cidr="10.201.0.0/16",  # TODO make configurable
                     cni=cfg.cni,
+                    tools=cfg.tools,
                 )
             case _:
                 raise ValueError(f"Unsupported Runtime: {cfg.runtime}")
 
-        clusters.append(cluster)
+        cls.append(cluster)
 
-    return clusters
+    return cls
 
 
 def main() -> None:
