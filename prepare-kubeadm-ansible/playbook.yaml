@@ -1,0 +1,290 @@
+---
+# ==============================================================================
+# PLAY 1: COMMON SETUP (All Nodes)
+# ==============================================================================
+- name: Common Configuration for Kubernetes Nodes
+  hosts: all
+  become: yes
+  vars:
+    k8s_version: "1.30"
+    containerd_config_path: /etc/containerd/config.toml
+  tasks:
+    # --- Hostname & Networking ---
+    - name: Set system hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts with new hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+
+    - name: Create kernel modules configuration file
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+        mode: "0644"
+
+    - name: Load kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Configure Sysctl params for Kubernetes
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_file: /etc/sysctl.d/k8s.conf
+        reload: yes
+      loop:
+        - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { key: "net.ipv4.ip_forward", value: "1" }
+        - { key: "fs.inotify.max_user_watches", value: "524288" }
+        - { key: "fs.inotify.max_user_instances", value: "8192" }
+        - { key: "fs.file-max", value: "6553600" }
+
+    # --- Swap Management ---
+    - name: Disable Swap at runtime
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+      changed_when: false
+
+    - name: Disable Swap in /etc/fstab (comment out all swap entries)
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+    - name: Mask swap target in systemd (Prevents reactivation after reboot)
+      ansible.builtin.systemd:
+        name: swap.target
+        enabled: no
+        masked: yes
+
+    # --- Containerd Setup ---
+    - name: Install prerequisite packages
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+          - python3-kubernetes
+        state: present
+        update_cache: yes
+
+    - name: Install Containerd
+      ansible.builtin.apt:
+        name: containerd
+        state: present
+
+    - name: Create containerd config directory
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: "0755"
+
+    - name: Generate containerd config with SystemdCgroup enabled
+      ansible.builtin.shell: |
+        containerd config default | sed 's/SystemdCgroup = false/SystemdCgroup = true/' > {{ containerd_config_path }}
+      args:
+        creates: "{{ containerd_config_path }}"
+      notify: Restart containerd
+
+    # --- Kubernetes Components ---
+    - name: Ensure keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download and dearmor Kubernetes GPG key
+      ansible.builtin.shell: >
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key | 
+        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Add Kubernetes apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /"
+        state: present
+        filename: kubernetes
+
+    - name: Install Kubelet, Kubeadm, Kubectl
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Hold Kubernetes packages versions
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: [kubelet, kubeadm, kubectl]
+
+    # --- Liqoctl Binary Installation ---
+    - name: Download and install liqoctl binary
+      ansible.builtin.unarchive:
+        src: "https://github.com/liqotech/liqo/releases/download/v1.0.1/liqoctl-linux-amd64.tar.gz"
+        dest: /usr/local/bin/
+        remote_src: yes
+        mode: "0755"
+        extra_opts:
+          - --transform
+          - s/liqoctl-linux-amd64/liqoctl/
+        creates: /usr/local/bin/liqoctl
+
+  handlers:
+    - name: Restart containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+# ==============================================================================
+# PLAY 2: CONTROL PLANE INITIALIZATION
+# ==============================================================================
+- name: Initialize Control Planes
+  hosts: controlplane
+  become: yes
+  vars:
+    # Determine role based on hostname (consumer vs provider)
+    cluster_role: "{{ 'provider' if 'provider' in inventory_hostname else 'consumer' }}"
+  tasks:
+    - name: Copy custom kubeadm configuration
+      ansible.builtin.template:
+        src: assets/kubeadm-config.yaml
+        dest: /root/kubeadm-config.yaml
+
+    - name: Initialize Kubeadm Cluster
+      ansible.builtin.command: >
+        kubeadm init --config /root/kubeadm-config.yaml --upload-certs
+      args:
+        creates: /etc/kubernetes/admin.conf
+      register: kubeadm_init
+
+    - name: Setup kubeconfig for root user
+      ansible.builtin.shell: |
+        mkdir -p /root/.kube
+        cp /etc/kubernetes/admin.conf /root/.kube/config
+        chown root:root /root/.kube/config
+      args:
+        creates: /root/.kube/config
+
+    # Important: Fetch kubeconfig to Ansible controller (local machine)
+    # This is required later for the Liqo peering command.
+    - name: Fetch kubeconfig to Ansible controller
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: "/tmp/kubeconfig-{{ cluster_role }}"
+        flat: yes
+
+    # --- Calico CNI Setup ---
+    - name: Install Calico Operator CRDs
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        src: https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/operator-crds.yaml
+        state: present
+
+    - name: Install Tigera Operator
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        src: https://raw.githubusercontent.com/projectcalico/calico/v3.30.3/manifests/tigera-operator.yaml
+        state: present
+
+    - name: Copy custom Calico configuration
+      ansible.builtin.copy:
+        src: assets/calico-config.yaml
+        dest: /root/calico-config.yaml
+
+    - name: Apply Calico CNI configuration
+      kubernetes.core.k8s:
+        kubeconfig: /etc/kubernetes/admin.conf
+        src: /root/calico-config.yaml
+        state: present
+
+    # --- Join Command Generation ---
+    - name: Generate join token
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_command_raw
+      changed_when: false
+
+    - name: Register join command as fact
+      ansible.builtin.set_fact:
+        join_command: "{{ join_command_raw.stdout }}"
+
+# ==============================================================================
+# PLAY 3: JOIN WORKERS
+# ==============================================================================
+- name: Join Worker Nodes to Cluster
+  hosts: workers
+  become: yes
+  vars:
+    # Logic to find the correct CP based on the hostname string matching
+    target_cp_host: >-
+      {{ 
+        groups['controlplane'] | 
+        select('search', 'provider' if 'provider' in inventory_hostname else 'consumer') | 
+        first 
+      }}
+  tasks:
+    - name: Join node to the cluster
+      ansible.builtin.command: "{{ hostvars[target_cp_host]['join_command'] }} --ignore-preflight-errors=all"
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+
+# ==============================================================================
+# PLAY 4: LIQO INSTALLATION & PEERING
+# ==============================================================================
+- name: Install Liqo and Establish Peering
+  hosts: controlplane
+  become: yes
+  vars:
+    cluster_role: "{{ 'milan' if 'provider' in inventory_hostname else 'rome' }}"
+  tasks:
+    # 1. Install Liqo on BOTH clusters
+    - name: Install Liqo on cluster
+      ansible.builtin.shell: |
+        liqoctl install kubeadm --kubeconfig /root/.kube/config --cluster-id {{ cluster_role }}
+      # We check for a liqo CRD or deployment to avoid re-running,
+      # but simplistic check here is just skipping if it runs successfully once.
+      register: liqo_install
+      changed_when: "'Installer initialized' in liqo_install.stdout"
+      failed_when:
+        - liqo_install.rc != 0
+        - "'already installed' not in liqo_install.stderr"
+
+    # 2. Peering Logic - ONLY runs on the Consumer CP
+    - name: Prepare and execute peering (Consumer -> Provider)
+      when: cluster_role == 'rome'
+      block:
+        - name: Copy Provider's kubeconfig to Consumer node
+          ansible.builtin.copy:
+            src: /tmp/kubeconfig-provider
+            dest: /root/provider.kubeconfig
+            mode: "0600"
+
+        - name: Establish Liqo Peering
+          ansible.builtin.command: >
+            liqoctl peer 
+            --kubeconfig /root/.kube/config 
+            --remote-kubeconfig /root/provider.kubeconfig 
+            --gw-server-service-type NodePort
+          register: liqo_peer_result
+          changed_when: "'Peer created' in liqo_peer_result.stdout"
+          failed_when:
+            - liqo_peer_result.rc != 0
+            - "'already peering' not in liqo_peer_result.stderr"
