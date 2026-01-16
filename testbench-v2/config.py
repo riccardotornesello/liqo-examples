@@ -4,6 +4,8 @@ from enum import Enum
 from typing import List, Optional, Any, Tuple
 from pydantic import BaseModel, Field, model_validator, ValidationError
 
+from logs import log_error, log_success
+
 
 class RuntimeEnum(str, Enum):
     k3d = "k3d"
@@ -105,7 +107,8 @@ class RootConfig(BaseModel):
 
 def format_pydantic_error(err):
     """
-    Formats Pydantic location tuple into a readable string.
+    Format a Pydantic validation error into a readable string.
+    
     Example: ('clusters', 0, 'name') -> 'clusters.0.name'
     """
     loc_path = ".".join(str(x) for x in err["loc"])
@@ -116,38 +119,38 @@ def format_pydantic_error(err):
 
 
 def validate_data(raw_data: Any) -> Optional[RootConfig]:
-    """Main function to run the validation."""
+    """Validate the configuration data and return a RootConfig object."""
 
     if raw_data is None:
-        print("❌ File is empty.")
+        log_error("Configuration file is empty")
         return None
 
     try:
-        # Trigger Validation
+        # Trigger validation
         cfg = RootConfig(**raw_data)
-        print("✅ Validation Successful!")
+        log_success("Configuration validation successful")
 
     except ValidationError as e:
-        print("❌ Validation Failed. Errors found:")
+        log_error("Configuration validation failed. Errors found:")
         for err in e.errors():
-            print(f" - {format_pydantic_error(err)}")
+            log_error(f"  - {format_pydantic_error(err)}")
         return None
 
     return cfg
 
 
 def validate_config_file(file_path: str) -> Optional[RootConfig]:
-    """Loads and validates a YAML configuration file."""
+    """Load and validate a YAML configuration file."""
 
     if not os.path.exists(file_path):
-        print(f"❌ File not found: {file_path}")
+        log_error(f"Configuration file not found: {file_path}")
         return None
 
     with open(file_path, "r") as f:
         try:
             raw_data = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            print(f"❌ YAML Syntax Error: {e}")
+            log_error(f"YAML syntax error: {e}")
             return None
 
     return validate_data(raw_data)
