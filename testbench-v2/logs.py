@@ -39,7 +39,16 @@ class ColoredFormatter(logging.Formatter):
         ),
     }
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format the log record with colors and emojis based on log level.
+        
+        Args:
+            record: The log record to format
+            
+        Returns:
+            The formatted log message string
+        """
         log_fmt = self.FORMATS.get(record.levelno, "%(message)s")
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)

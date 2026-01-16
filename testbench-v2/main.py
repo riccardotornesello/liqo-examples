@@ -70,9 +70,15 @@ def main() -> None:
     try:
         setup_logging()
     except Exception as e:
-        # Fallback to basic logging if setup fails
+        # Fallback to basic logging with similar format if setup fails
         print(f"Warning: Failed to setup logging: {e}", file=sys.stderr)
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s\t%(message)s",
+            handlers=[
+                logging.StreamHandler(sys.stdout),
+            ],
+        )
     
     # Create Docker network
     create_docker_network("testbench-net")
