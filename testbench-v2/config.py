@@ -1,7 +1,7 @@
 import yaml
 import os
 from enum import Enum
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Tuple
 from pydantic import BaseModel, Field, model_validator, ValidationError
 
 
@@ -22,6 +22,7 @@ class LiqoInstallationConfig(BaseModel):
 
 class LiqoConfig(BaseModel):
     installations: List[LiqoInstallationConfig] = Field(default_factory=list)
+    peerings: List[Tuple[str, str]] = Field(default_factory=list)
 
 
 class ToolsConfig(BaseModel):

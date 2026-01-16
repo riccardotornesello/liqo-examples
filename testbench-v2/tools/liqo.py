@@ -34,6 +34,18 @@ class LiqoTool(Tool):
                     f"Liqo installation is not supported for cluster: {cluster.name}"
                 )
 
+        for peering in self.config.peerings:
+            cluster_a = self.clusters[peering[0]]
+            cluster_b = self.clusters[peering[1]]
+
+            self._peer_clusters(
+                kubeconfig=cluster_a.get_kubeconfig_location(),
+                remote_kubeconfig=cluster_b.get_kubeconfig_location(),
+                gw_server_service_type="LoadBalancer"
+                if isinstance(cluster_b, K3d)
+                else "NodePort",
+            )
+
     def _install_in_cluster(
         self,
         runtime: str,
@@ -73,4 +85,31 @@ class LiqoTool(Tool):
                 command.extend([param, value])
 
         # Execute installation command
+        subprocess.run(command, check=True)
+
+    def _peer_clusters(
+        self,
+        kubeconfig: str,
+        remote_kubeconfig: str,
+        gw_server_service_type: str,
+    ) -> None:
+        print("Peering clusters")
+
+        command = [
+            "liqoctl",
+            "peer",
+        ]
+
+        # Build installation command by adding parameters
+        parameters = {
+            "--kubeconfig": kubeconfig,
+            "--remote-kubeconfig": remote_kubeconfig,
+            "--gw-server-service-type": gw_server_service_type,
+        }
+
+        for param, value in parameters.items():
+            if value is not None:
+                command.extend([param, value])
+
+        # Execute peering command
         subprocess.run(command, check=True)

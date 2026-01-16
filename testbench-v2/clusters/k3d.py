@@ -90,6 +90,7 @@ class K3d(Cluster):
             "image": self.IMAGE,
             "servers": 1,
             "agents": self.nodes - 1,
+            "network": "testbench-net",  # TODO: make configurable
             "options": {
                 "k3s": {
                     "extraArgs": [
