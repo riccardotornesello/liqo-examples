@@ -1,4 +1,6 @@
+import logging
 import subprocess
+import sys
 from typing import List
 
 from config import validate_config_file, ClusterConfig, RuntimeEnum
@@ -65,7 +67,12 @@ def parse(cluster_configs: List[ClusterConfig]) -> List[Cluster]:
 def main() -> None:
     """Main entry point for the testbench application."""
     # Initialize logging system
-    setup_logging()
+    try:
+        setup_logging()
+    except Exception as e:
+        # Fallback to basic logging if setup fails
+        print(f"Warning: Failed to setup logging: {e}", file=sys.stderr)
+        logging.basicConfig(level=logging.INFO)
     
     # Create Docker network
     create_docker_network("testbench-net")

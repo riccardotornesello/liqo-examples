@@ -47,16 +47,26 @@ class ColoredFormatter(logging.Formatter):
 
 class StdoutFilter(logging.Filter):
     """Filter that only allows INFO and DEBUG levels to stdout."""
-    def filter(self, record):
+    
+    def filter(self, record: logging.LogRecord) -> bool:
+        """
+        Filter log records based on their level.
+        
+        Args:
+            record: The log record to filter
+            
+        Returns:
+            True if the record should be logged to this handler, False otherwise
+        """
         return record.levelno <= logging.INFO
 
 
-def setup_logging(level=logging.INFO):
+def setup_logging(level: int = logging.INFO) -> None:
     """
     Configure the logging system with proper handlers and formatters.
     
     Args:
-        level: The minimum logging level (default: INFO)
+        level: The minimum logging level (default: logging.INFO)
     """
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -80,33 +90,39 @@ def setup_logging(level=logging.INFO):
     logger.addHandler(stderr_handler)
 
 
-def log_debug(message: str):
+def log_debug(message: str) -> None:
     """Log a debug message with 🔍 emoji."""
     logging.debug(message)
 
 
-def log_info(message: str):
+def log_info(message: str) -> None:
     """Log an informational message with ℹ️ emoji."""
     logging.info(message)
 
 
-def log_success(message: str):
-    """Log a success message with ✅ emoji."""
+def log_success(message: str) -> None:
+    """
+    Log a success message with ✅ emoji.
+    
+    Note: Uses custom formatting as SUCCESS is not a standard log level.
+    This provides consistency with the emoji-based visual system while
+    maintaining compatibility with the INFO level for stdout routing.
+    """
     logging.info(
         f"✅ {LogColors.OKGREEN.value}SUCCESS{LogColors.ENDC.value}\t{message}"
     )
 
 
-def log_warning(message: str):
+def log_warning(message: str) -> None:
     """Log a warning message with ⚠️ emoji."""
     logging.warning(message)
 
 
-def log_error(message: str):
+def log_error(message: str) -> None:
     """Log an error message with ❌ emoji."""
     logging.error(message)
 
 
-def log_critical(message: str):
+def log_critical(message: str) -> None:
     """Log a critical error message with 🔥 emoji."""
     logging.critical(message)
