@@ -12,17 +12,26 @@ class RuntimeEnum(str, Enum):
 class CNIEnum(str, Enum):
     calico = "calico"
     flannel = "flannel"
+    cilium = "cilium"
+
+
+class LiqoInstallationConfig(BaseModel):
+    cluster: str
+    version: Optional[str] = None
+
+
+class LiqoConfig(BaseModel):
+    installations: List[LiqoInstallationConfig] = Field(default_factory=list)
 
 
 class ToolsConfig(BaseModel):
-    liqo: Optional[str] = None
+    liqo: Optional[LiqoConfig] = None
 
 
 class CommonConfig(BaseModel):
     runtime: RuntimeEnum = RuntimeEnum.k3d
     cni: CNIEnum = CNIEnum.calico
     nodes: int = 1
-    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 class ClusterConfig(BaseModel):
@@ -31,12 +40,12 @@ class ClusterConfig(BaseModel):
     runtime: Optional[RuntimeEnum] = None
     cni: Optional[CNIEnum] = None
     nodes: Optional[int] = None
-    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 class RootConfig(BaseModel):
     default: Optional[CommonConfig] = Field(default_factory=CommonConfig)
     clusters: List[ClusterConfig]
+    tools: Optional[ToolsConfig] = Field(default_factory=ToolsConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -71,14 +80,6 @@ class RootConfig(BaseModel):
             for field in inheritable_fields:
                 if field not in cluster and field in defaults:
                     cluster[field] = defaults[field]
-
-            # Merge tools sub-fields
-            if "tools" not in cluster and "tools" in defaults:
-                cluster["tools"] = defaults["tools"]
-            elif "tools" in cluster and "tools" in defaults:
-                for tool_field, tool_value in defaults["tools"].items():
-                    if tool_field not in cluster["tools"]:
-                        cluster["tools"][tool_field] = tool_value
 
         return data
 

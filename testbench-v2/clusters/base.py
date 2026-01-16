@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from config import CNIEnum, ToolsConfig
+from config import CNIEnum
 
 
 class Cluster(ABC):
@@ -9,7 +9,6 @@ class Cluster(ABC):
     cluster_cidr: str
     service_cidr: str
     cni: CNIEnum
-    tools: ToolsConfig
 
     def __init__(
         self,
@@ -18,19 +17,19 @@ class Cluster(ABC):
         cluster_cidr: str,
         service_cidr: str,
         cni: CNIEnum,
-        tools: ToolsConfig,
     ):
         self.name = name
         self.nodes = nodes
         self.cluster_cidr = cluster_cidr
         self.service_cidr = service_cidr
         self.cni = cni
-        self.tools = tools
 
     def create(self) -> None:
         self.init_cluster()
         self.install_cni()
-        self.install_tools()
+
+    def get_kubeconfig_location(self) -> str:
+        return f"out/kubeconfigs/{self.name}.yaml"
 
     @abstractmethod
     def init_cluster(self) -> None:
@@ -38,8 +37,4 @@ class Cluster(ABC):
 
     @abstractmethod
     def install_cni(self) -> None:
-        raise NotImplementedError("Subclasses must implement this method.")
-
-    @abstractmethod
-    def install_tools(self) -> None:
         raise NotImplementedError("Subclasses must implement this method.")

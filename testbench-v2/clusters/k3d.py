@@ -1,13 +1,13 @@
 import yaml
 import os
 import subprocess
-from kubernetes import utils, config, client
+from kubernetes import config, client
 
 from clusters.base import Cluster
 from cni.base import CNI
 from cni.calico import Calico
+from cni.cilium import Cilium
 from config import CNIEnum
-from tools.liqo import LiqoTool
 
 
 class K3d(Cluster):
@@ -47,7 +47,7 @@ class K3d(Cluster):
 
         # Save kubeconfig content
         kubeconfig_content = self._get_kubeconfig_content()
-        kubeconfig_location = self._get_kubeconfig_location()
+        kubeconfig_location = self.get_kubeconfig_location()
 
         os.makedirs(os.path.dirname(kubeconfig_location), exist_ok=True)
 
@@ -55,7 +55,7 @@ class K3d(Cluster):
             f.write(kubeconfig_content)
 
     def install_cni(self) -> None:
-        kubeconfig_location = self._get_kubeconfig_location()
+        kubeconfig_location = self.get_kubeconfig_location()
 
         # Install the selected CNI plugin
         cni: CNI | None = None
@@ -63,6 +63,8 @@ class K3d(Cluster):
         match self.cni:
             case CNIEnum.calico:
                 cni = Calico(kubeconfig=kubeconfig_location, cidr=self.cluster_cidr)
+            case CNIEnum.cilium:
+                cni = Cilium(kubeconfig=kubeconfig_location, cidr=self.cluster_cidr)
             case CNIEnum.flannel:
                 # Skip installation as flannel is default
                 pass
@@ -71,25 +73,6 @@ class K3d(Cluster):
 
         if cni is not None:
             cni.install()
-
-    def install_tools(self) -> None:
-        kubeconfig_location = self._get_kubeconfig_location()
-
-        # Install Liqo
-        if self.tools.liqo:
-            liqo = LiqoTool(
-                runtime="k3s",
-                cluster_id=self.name,
-                kubeconfig=kubeconfig_location,
-                version=self.tools.liqo,
-                api_server_url=self._get_api_server_address(),
-                pod_cidr=self.cluster_cidr,
-                service_cidr=self.service_cidr,
-            )
-            liqo.install()
-
-    def _get_kubeconfig_location(self) -> str:
-        return f"out/kubeconfigs/{self.name}.yaml"
 
     def _get_kubeconfig_content(self) -> str:
         result = subprocess.run(
@@ -136,8 +119,8 @@ class K3d(Cluster):
             },
         }
 
-    def _get_api_server_address(self) -> str:
-        kubeconfig_location = self._get_kubeconfig_location()
+    def get_api_server_address(self) -> str:
+        kubeconfig_location = self.get_kubeconfig_location()
         k8s_client = config.new_client_from_config(config_file=kubeconfig_location)
         v1 = client.CoreV1Api(k8s_client)
 
