@@ -5,6 +5,7 @@ from config import LiqoConfig
 from tools.base import Tool
 from clusters.k3d import K3d
 from clusters.base import Cluster
+from logs import log_info
 
 
 class LiqoTool(Tool):
@@ -56,7 +57,7 @@ class LiqoTool(Tool):
         pod_cidr: str | None = None,
         service_cidr: str | None = None,
     ) -> None:
-        print(f"Installing Liqo version {version}")
+        log_info(f"Installing Liqo version '{version}' in cluster '{cluster_id}'")
 
         repo_url = None
         version_hash = None
@@ -93,14 +94,14 @@ class LiqoTool(Tool):
         remote_kubeconfig: str,
         gw_server_service_type: str,
     ) -> None:
-        print("Peering clusters")
+        log_info("Establishing cluster peering connection")
 
         command = [
             "liqoctl",
             "peer",
         ]
 
-        # Build installation command by adding parameters
+        # Build peering command by adding parameters
         parameters = {
             "--kubeconfig": kubeconfig,
             "--remote-kubeconfig": remote_kubeconfig,
