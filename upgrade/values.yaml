@@ -1,0 +1,60 @@
+controllerManager:
+  image:
+    name: ttl.sh/riccardotornesello/liqo-controller-manager-ci
+    version: "1h"
+crdReplicator:
+  image:
+    name: ttl.sh/riccardotornesello/crd-replicator-ci
+    version: "1h"
+ipam:
+  internal:
+    image:
+      name: ttl.sh/riccardotornesello/ipam-ci
+      version: "1h"
+metricAgent:
+  image:
+    name: ttl.sh/riccardotornesello/metric-agent-ci
+    version: "1h"
+  # initContainer:
+  #   image:
+  #     name: ttl.sh/riccardotornesello/cert-creator-ci
+  #     version: "1h"
+networking:
+  fabric:
+    image:
+      name: ttl.sh/riccardotornesello/fabric-ci
+      version: "1h"
+  gatewayTemplates:
+    container:
+      gateway:
+        image:
+          name: ttl.sh/riccardotornesello/gateway-ci
+          version: "1h"
+      geneve:
+        image:
+          name: ttl.sh/riccardotornesello/gateway/geneve-ci
+          version: "1h"
+      wireguard:
+        image:
+          name: ttl.sh/riccardotornesello/gateway/wireguard-ci
+          version: "1h"
+proxy:
+  image:
+    name: ttl.sh/riccardotornesello/proxy-ci
+    version: "1h"
+telemetry:
+  image:
+    name: ttl.sh/riccardotornesello/telemetry-ci
+    version: "1h"
+uninstaller:
+  image:
+    name: ttl.sh/riccardotornesello/uninstaller-ci
+    version: "1h"
+virtualKubelet:
+  image:
+    name: ttl.sh/riccardotornesello/virtual-kubelet-ci
+    version: "1h"
+webhook:
+  image:
+    name: ttl.sh/riccardotornesello/webhook-ci
+    version: "1h"
