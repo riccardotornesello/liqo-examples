@@ -1,1 +1,0 @@
-liqoctl install k3s --cluster-id rome --kubeconfig ../out/kubeconfigs/rome.yaml --api-server-url "https://172.18.0.2:6443" --pod-cidr "10.200.0.0/16" --service-cidr "10.71.0.0/16" --local-chart-path ../../liqo/deployments/liqo --values ./values.yaml -v

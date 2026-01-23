@@ -30,8 +30,10 @@ export ARCHS="linux/amd64"
 export DOCKER_ORGANIZATION="riccardotornesello"
 export DOCKER_TAG="3h"
 
+rm -rf ../../../../liqo/bin
+
 (
-  cd ../../liqo
+  cd ../../../../liqo
 
   # Build only the requested components
   for component in "${ALL_COMPONENTS[@]}"; do
