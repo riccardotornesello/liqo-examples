@@ -8,6 +8,7 @@ from cni.base import CNI
 from cni.calico import Calico
 from cni.cilium import Cilium
 from config import CNIEnum
+from const import DOCKER_NETWORK_NAME
 
 
 class K3d(Cluster):
@@ -90,7 +91,7 @@ class K3d(Cluster):
             "image": self.IMAGE,
             "servers": 1,
             "agents": self.nodes - 1,
-            "network": "testbench-net",  # TODO: make configurable
+            "network": DOCKER_NETWORK_NAME,
             "options": {
                 "k3s": {
                     "extraArgs": [

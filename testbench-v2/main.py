@@ -5,6 +5,7 @@ from config import validate_config_file, ClusterConfig, RuntimeEnum
 from clusters.base import Cluster
 from clusters.k3d import K3d
 from tools.liqo import LiqoTool
+from const import DOCKER_NETWORK_NAME
 
 
 def create_docker_network(network_name: str) -> None:
@@ -48,8 +49,8 @@ def parse(cluster_configs: List[ClusterConfig]) -> List[Cluster]:
                 cluster = K3d(
                     name=cfg.name,
                     nodes=cfg.nodes,
-                    cluster_cidr="10.200.0.0/16",  # TODO make configurable
-                    service_cidr="10.201.0.0/16",  # TODO make configurable
+                    cluster_cidr=cfg.cluster_cidr,
+                    service_cidr=cfg.service_cidr,
                     cni=cfg.cni,
                 )
             case _:
@@ -62,7 +63,7 @@ def parse(cluster_configs: List[ClusterConfig]) -> List[Cluster]:
 
 def main() -> None:
     # Create Docker network
-    create_docker_network("testbench-net")
+    create_docker_network(DOCKER_NETWORK_NAME)
 
     # Fetch configuration
     cfg = validate_config_file("examples/base.yaml")

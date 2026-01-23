@@ -33,6 +33,8 @@ class CommonConfig(BaseModel):
     runtime: RuntimeEnum = RuntimeEnum.k3d
     cni: CNIEnum = CNIEnum.calico
     nodes: int = 1
+    cluster_cidr: str = "10.200.0.0/16"
+    service_cidr: str = "10.71.0.0/16"
 
 
 class ClusterConfig(BaseModel):
@@ -41,6 +43,8 @@ class ClusterConfig(BaseModel):
     runtime: Optional[RuntimeEnum] = None
     cni: Optional[CNIEnum] = None
     nodes: Optional[int] = None
+    cluster_cidr: Optional[str] = None
+    service_cidr: Optional[str] = None
 
 
 class RootConfig(BaseModel):
@@ -76,6 +80,8 @@ class RootConfig(BaseModel):
                 "runtime",
                 "nodes",
                 "cni",
+                "cluster_cidr",
+                "service_cidr",
             ]
 
             for field in inheritable_fields:
