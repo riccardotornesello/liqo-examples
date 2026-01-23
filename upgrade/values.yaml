@@ -1,60 +1,60 @@
 controllerManager:
   image:
     name: ttl.sh/riccardotornesello/liqo-controller-manager-ci
-    version: "1h"
+    version: "3h"
 crdReplicator:
   image:
     name: ttl.sh/riccardotornesello/crd-replicator-ci
-    version: "1h"
+    version: "3h"
 ipam:
   internal:
     image:
       name: ttl.sh/riccardotornesello/ipam-ci
-      version: "1h"
+      version: "3h"
 metricAgent:
   image:
     name: ttl.sh/riccardotornesello/metric-agent-ci
-    version: "1h"
+    version: "3h"
   # initContainer:
   #   image:
   #     name: ttl.sh/riccardotornesello/cert-creator-ci
-  #     version: "1h"
+  #     version: "3h"
 networking:
   fabric:
     image:
       name: ttl.sh/riccardotornesello/fabric-ci
-      version: "1h"
+      version: "3h"
   gatewayTemplates:
     container:
       gateway:
         image:
           name: ttl.sh/riccardotornesello/gateway-ci
-          version: "1h"
+          version: "3h"
       geneve:
         image:
           name: ttl.sh/riccardotornesello/gateway/geneve-ci
-          version: "1h"
+          version: "3h"
       wireguard:
         image:
           name: ttl.sh/riccardotornesello/gateway/wireguard-ci
-          version: "1h"
+          version: "3h"
 proxy:
   image:
     name: ttl.sh/riccardotornesello/proxy-ci
-    version: "1h"
+    version: "3h"
 telemetry:
   image:
     name: ttl.sh/riccardotornesello/telemetry-ci
-    version: "1h"
+    version: "3h"
 uninstaller:
   image:
     name: ttl.sh/riccardotornesello/uninstaller-ci
-    version: "1h"
+    version: "3h"
 virtualKubelet:
   image:
     name: ttl.sh/riccardotornesello/virtual-kubelet-ci
-    version: "1h"
+    version: "3h"
 webhook:
   image:
     name: ttl.sh/riccardotornesello/webhook-ci
-    version: "1h"
+    version: "3h"
