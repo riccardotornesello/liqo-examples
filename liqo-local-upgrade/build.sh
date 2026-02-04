@@ -28,7 +28,7 @@ ALL_COMPONENTS=(
 export DOCKER_REGISTRY="ttl.sh"
 export ARCHS="linux/amd64"
 export DOCKER_ORGANIZATION="riccardotornesello"
-export DOCKER_TAG="3h"
+export DOCKER_TAG="6h"
 
 rm -rf ../../../../liqo/bin
 
